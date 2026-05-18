@@ -45,6 +45,7 @@ async function init() {
 function addActivityRow() {
   const node = template.content.firstElementChild.cloneNode(true);
   const select = node.querySelector(".activity-select");
+  const quantityInput = node.querySelector(".quantity-input");
   select.innerHTML = [
     '<option value="" disabled selected>Обери активність</option>',
     ...state.activities.map((activity) => `<option value="${activity.key}">${activity.title}</option>`)
@@ -58,6 +59,8 @@ function addActivityRow() {
     }
   });
 
+  quantityInput.addEventListener("input", sanitizeQuantityInput);
+
   node.querySelectorAll("input, select, textarea").forEach((input) => {
     input.addEventListener("input", updateSummary);
     input.addEventListener("change", updateSummary);
@@ -66,6 +69,14 @@ function addActivityRow() {
   activityContainer.append(node);
   updateSummary();
   lucide.createIcons();
+}
+
+function sanitizeQuantityInput(event) {
+  const input = event.target;
+  const sanitizedValue = input.value.replace(/\D/g, "").replace(/^0+/, "");
+  if (input.value !== sanitizedValue) {
+    input.value = sanitizedValue;
+  }
 }
 
 function rowToActivity(row) {
