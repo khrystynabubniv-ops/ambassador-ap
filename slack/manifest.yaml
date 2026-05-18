@@ -1,0 +1,27 @@
+_metadata:
+  major_version: 2
+  minor_version: 1
+display_information:
+  name: Ambassador Coins
+  description: Student ambassador activity reports and coin summaries.
+  background_color: "#165A4A"
+features:
+  bot_user:
+    display_name: Ambassador Coins
+    always_online: false
+  slash_commands:
+    - command: /ambassador-report
+      url: https://YOUR-RAILWAY-DOMAIN/slack/commands
+      description: Generate the ambassador coins report.
+      usage_hint: "last | 2026-04"
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - commands
+      - im:write
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

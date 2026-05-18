@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ambassador Checklist</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="form-pane" aria-label="Ambassador checklist">
+        <div class="brand-row">
+          <div class="brand-mark">U</div>
+          <div>
+            <p class="eyebrow">Student Ambassador Program</p>
+            <h1>Ambassador checklist</h1>
+          </div>
+        </div>
+
+        <form id="checklist-form">
+          <div class="grid two">
+            <label>
+              <span>Ім'я</span>
+              <input name="ambassadorName" autocomplete="name" required placeholder="Анна Петренко" />
+            </label>
+            <label>
+              <span>Slack nickname</span>
+              <input name="slackNickname" autocomplete="off" required placeholder="@anna" />
+            </label>
+          </div>
+
+          <div class="grid two">
+            <label>
+              <span>Місяць</span>
+              <select name="month" id="month" required></select>
+            </label>
+            <label>
+              <span>Slack user ID</span>
+              <input name="slackUserId" autocomplete="off" placeholder="U012ABCDEF" />
+            </label>
+          </div>
+
+          <div class="activity-header">
+            <h2>Активності</h2>
+            <button class="ghost-button" type="button" id="add-activity">
+              <i data-lucide="plus" aria-hidden="true"></i>
+              <span>Додати</span>
+            </button>
+          </div>
+
+          <div id="activities" class="activities"></div>
+
+          <div class="actions">
+            <button class="primary-button" type="submit">
+              <i data-lucide="send" aria-hidden="true"></i>
+              <span>Submit checklist</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="summary-pane" aria-label="Coins summary">
+        <div class="summary-visual">
+          <span>Coins</span>
+          <strong id="subtotal">0</strong>
+        </div>
+        <div class="summary-lines">
+          <div>
+            <span>Активностей</span>
+            <strong id="activity-count">0</strong>
+          </div>
+          <div>
+            <span>Бонус</span>
+            <strong id="bonus">0</strong>
+          </div>
+          <div>
+            <span>Total у формі</span>
+            <strong id="total">0</strong>
+          </div>
+        </div>
+        <pre id="result" class="result" hidden></pre>
+      </aside>
+    </main>
+
+    <template id="activity-template">
+      <section class="activity-row">
+        <div class="row-top">
+          <label>
+            <span>Тип активності</span>
+            <select class="activity-select" required></select>
+          </label>
+          <button class="icon-button remove-activity" type="button" title="Remove activity" aria-label="Remove activity">
+            <i data-lucide="trash-2" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="grid two compact">
+          <label class="quantity-label">
+            <span>Кількість</span>
+            <input class="quantity-input" type="number" min="1" step="1" value="1" required />
+          </label>
+          <label>
+            <span>Proof / screenshots</span>
+            <input class="proof-input" type="file" multiple accept="image/*,.pdf" />
+          </label>
+        </div>
+        <label>
+          <span>Коментар</span>
+          <textarea class="notes-input" rows="2" placeholder="Короткий контекст, якщо потрібно"></textarea>
+        </label>
+        <div class="row-total">
+          <span class="activity-rate">0 coins</span>
+          <strong class="activity-total">0</strong>
+        </div>
+      </section>
+    </template>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
