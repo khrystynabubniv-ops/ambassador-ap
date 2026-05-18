@@ -11,7 +11,7 @@ features:
     always_online: false
   slash_commands:
     - command: /ambassador-report
-      url: https://YOUR-RAILWAY-DOMAIN/slack/commands
+      url: https://ambassador-ap-production.up.railway.app/slack/commands
       description: Generate the ambassador coins report.
       usage_hint: "last | 2026-04"
       should_escape: false

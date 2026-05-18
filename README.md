@@ -68,7 +68,7 @@ npm run setup:notion
 
 1. Відкрий [Slack app manifests](https://api.slack.com/apps?new_app=1).
 2. Створи app from manifest і встав `slack/manifest.yaml`.
-3. Після Railway deploy заміни `https://YOUR-RAILWAY-DOMAIN` у manifest на реальний Railway URL.
+3. Manifest уже налаштований на Railway URL: `https://ambassador-ap-production.up.railway.app/slack/commands`.
 4. Install app to workspace.
 5. Скопіюй:
    - `SLACK_BOT_TOKEN` з OAuth tokens;
@@ -83,15 +83,14 @@ npm run setup:notion
 
 1. Створи Railway service з GitHub repo.
 2. Додай env vars з `.env.example` і значення, які отримала з Notion/Slack.
-3. Generate domain у Railway.
-4. Постав цей URL у `PUBLIC_BASE_URL`.
-5. Онови Slack manifest command URL:
+3. Railway domain уже згенерований:
 
 ```text
-https://your-railway-domain.up.railway.app/slack/commands
+https://ambassador-ap-production.up.railway.app
 ```
 
-6. Redeploy service.
+4. `PUBLIC_BASE_URL` уже встановлено на цей URL.
+5. Після додавання secret env vars зроби redeploy service.
 
 Scheduler працює тільки поки Railway service живий, тому цей сервіс має бути постійно запущений.
 
