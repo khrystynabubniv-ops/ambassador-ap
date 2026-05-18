@@ -44,8 +44,9 @@ export class SlackService {
       return;
     }
 
+    const targetChannel = await this.resolveChannel(channel);
     await this.client.chat.postMessage({
-      channel,
+      channel: targetChannel,
       text,
       unfurl_links: false,
       unfurl_media: false
@@ -93,5 +94,22 @@ export class SlackService {
         text
       })
     });
+  }
+
+  private async resolveChannel(channel: string): Promise<string> {
+    if (!this.client || !channel.startsWith("U")) {
+      return channel;
+    }
+
+    const response = await this.client.conversations.open({
+      users: channel
+    });
+
+    const dmChannel = response.channel?.id;
+    if (!dmChannel) {
+      throw new Error(`Could not open Slack DM for user ${channel}.`);
+    }
+
+    return dmChannel;
   }
 }

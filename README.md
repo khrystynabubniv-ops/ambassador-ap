@@ -79,6 +79,8 @@ npm run setup:notion
    - `SLACK_ADMIN_CHANNEL_ID`
    - `SLACK_REPORT_CHANNEL_ID`
 
+Для `SLACK_ADMIN_CHANNEL_ID` і `SLACK_REPORT_CHANNEL_ID` можна також використовувати Slack user ID формату `U...`; бот відкриє DM і надішле повідомлення напряму.
+
 ### 3. Railway
 
 1. Створи Railway service з GitHub repo.
