@@ -19,6 +19,21 @@ const AUTOMATION_KIND_OPTIONS = [
   { name: "report", color: "green" }
 ];
 
+export const ACTIVITY_SUMMARY_PROPERTIES = [
+  { key: "vacancy_student_chats", property: "Vacancy Chats Qty" },
+  { key: "events_internships_student_chats", property: "Event Chats Qty" },
+  { key: "teacher_contact", property: "Teacher Contacts Qty" },
+  { key: "own_university_lecture", property: "Own Lectures Qty" },
+  { key: "guest_lecture_coorganization", property: "Guest Lectures Qty" },
+  { key: "career_center_channel", property: "Career Center Qty" },
+  { key: "telegram_uni_career_hub_post", property: "Telegram Posts Qty" },
+  { key: "office_tour", property: "Office Tours Qty" }
+] as const;
+
+const ACTIVITY_SUMMARY_SCHEMA = Object.fromEntries(
+  ACTIVITY_SUMMARY_PROPERTIES.map(({ property }) => [property, { number: { format: "number" } }])
+);
+
 export const notionSchemas = {
   ambassadors: {
     Name: { title: {} },
@@ -56,9 +71,12 @@ export const notionSchemas = {
   },
   monthlySummary: {
     Summary: { title: {} },
+    "Ambassador Name": { rich_text: {} },
     Month: { date: {} },
     "Slack Nickname": { rich_text: {} },
     "Slack User ID": { rich_text: {} },
+    "Activity Breakdown": { rich_text: {} },
+    ...ACTIVITY_SUMMARY_SCHEMA,
     "Base Coins": { number: { format: "number" } },
     "Completed Count": { number: { format: "number" } },
     "Bonus Coins": { number: { format: "number" } },

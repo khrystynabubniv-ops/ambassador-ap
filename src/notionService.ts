@@ -15,6 +15,7 @@ import {
   titleText
 } from "./notionClient.js";
 import { displaySlackNickname, normalizeSlackNickname, truncateForNotion } from "./text.js";
+import { ACTIVITY_SUMMARY_PROPERTIES } from "./notionSchema.js";
 
 type NotionPage = {
   id: string;
@@ -170,9 +171,17 @@ export class NotionService {
 
     const properties = {
       Summary: titleText(`${summary.month} ${displaySlackNickname(summary.slackNickname)}`),
+      "Ambassador Name": richText(summary.ambassadorName ?? ""),
       Month: { date: { start: monthStart(summary.month) } },
       "Slack Nickname": richText(normalizeSlackNickname(summary.slackNickname)),
       "Slack User ID": richText(summary.slackUserId ?? ""),
+      "Activity Breakdown": richText(truncateForNotion(summary.activityBreakdown)),
+      ...Object.fromEntries(
+        ACTIVITY_SUMMARY_PROPERTIES.map(({ key, property }) => [
+          property,
+          { number: summary.activityQuantities[key] ?? 0 }
+        ])
+      ),
       "Base Coins": { number: summary.baseCoins },
       "Completed Count": { number: summary.distinctCompleted },
       "Bonus Coins": { number: summary.bonusCoins },
@@ -200,6 +209,7 @@ export class NotionService {
     })) as NotionPage[];
 
     return pages.map((page) => ({
+      ambassadorName: propertyPlainText(page.properties["Ambassador Name"]),
       month,
       slackNickname: propertyPlainText(page.properties["Slack Nickname"]),
       slackUserId: propertyPlainText(page.properties["Slack User ID"]),
@@ -207,7 +217,11 @@ export class NotionService {
       distinctCompleted: propertyNumber(page.properties["Completed Count"]),
       bonusCoins: propertyNumber(page.properties["Bonus Coins"]),
       totalCoins: propertyNumber(page.properties["Total Coins"]),
-      reportLine: propertyPlainText(page.properties["Report Line"])
+      reportLine: propertyPlainText(page.properties["Report Line"]),
+      activityQuantities: Object.fromEntries(
+        ACTIVITY_SUMMARY_PROPERTIES.map(({ key, property }) => [key, propertyNumber(page.properties[property])])
+      ),
+      activityBreakdown: propertyPlainText(page.properties["Activity Breakdown"])
     }));
   }
 

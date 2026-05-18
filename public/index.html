@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ambassador Checklist</title>
+    <title>Ambassador Activity Report</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -11,52 +11,48 @@
   </head>
   <body>
     <main class="shell">
-      <section class="form-pane" aria-label="Ambassador checklist">
+      <section class="form-pane" aria-label="Ambassador activity report">
         <div class="brand-row">
           <div class="brand-mark">U</div>
           <div>
             <p class="eyebrow">Student Ambassador Program</p>
-            <h1>Ambassador checklist</h1>
+            <h1>Ambassador activity report</h1>
           </div>
         </div>
 
-        <form id="checklist-form">
+        <form id="activity-form">
           <div class="grid two">
             <label>
               <span>Ім'я</span>
-              <input name="ambassadorName" autocomplete="name" required placeholder="Анна Петренко" />
+              <input name="ambassadorName" autocomplete="name" required />
             </label>
             <label>
               <span>Slack nickname</span>
-              <input name="slackNickname" autocomplete="off" required placeholder="@anna" />
+              <input name="slackNickname" autocomplete="off" required placeholder="@" />
             </label>
           </div>
 
-          <div class="grid two">
+          <div class="grid one">
             <label>
               <span>Місяць</span>
               <select name="month" id="month" required></select>
-            </label>
-            <label>
-              <span>Slack user ID</span>
-              <input name="slackUserId" autocomplete="off" placeholder="U012ABCDEF" />
             </label>
           </div>
 
           <div class="activity-header">
             <h2>Активності</h2>
-            <button class="ghost-button" type="button" id="add-activity">
-              <i data-lucide="plus" aria-hidden="true"></i>
-              <span>Додати</span>
-            </button>
           </div>
 
           <div id="activities" class="activities"></div>
 
           <div class="actions">
+            <button class="add-button" type="button" id="add-activity">
+              <i data-lucide="plus" aria-hidden="true"></i>
+              <span>Додати активність</span>
+            </button>
             <button class="primary-button" type="submit">
               <i data-lucide="send" aria-hidden="true"></i>
-              <span>Submit checklist</span>
+              <span>Відправити форму</span>
             </button>
           </div>
         </form>
@@ -102,7 +98,7 @@
             <input class="quantity-input" type="number" min="1" step="1" value="1" required />
           </label>
           <label>
-            <span>Proof / screenshots</span>
+            <span>Підтвердження / скріни</span>
             <input class="proof-input" type="file" multiple accept="image/*,.pdf" />
           </label>
         </div>

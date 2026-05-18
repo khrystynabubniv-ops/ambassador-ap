@@ -2,7 +2,7 @@
 
 Polished version для студентської ambassador-програми:
 
-- кастомна форма для monthly checklist;
+- кастомна форма для monthly activity report;
 - Notion як приватна база даних і адмін-панель;
 - proof / screenshots як файли в Notion;
 - Slack bot для нагадувань, admin-пушів і репортів;
@@ -14,7 +14,7 @@ Polished version для студентської ambassador-програми:
 2. Форма рахує subtotal у браузері, але фінальний розрахунок робить backend.
 3. Кожна активність створюється окремим рядком у Notion `Activity Submissions`.
 4. Backend оновлює `Monthly Summary` для людини й місяця.
-5. Тобі приходить Slack notification про новий checklist.
+5. Тобі приходить Slack notification про новий activity report.
 6. 1-го числа сервіс надсилає reminder у `student-ambassador-program`.
 7. 5-го числа сервіс надсилає monthly report.
 8. Slash command `/ambassador-report last` або `/ambassador-report 2026-04` генерує copy-ready report.
@@ -28,6 +28,18 @@ Polished version для студентської ambassador-програми:
 - `Ambassador Program - Activity Submissions`
 - `Ambassador Program - Monthly Summary`
 - `Ambassador Program - Automation Log`
+
+Головна робоча таблиця для менеджера: `Ambassador Program - Monthly Summary`.
+У ній є один рядок на людину й місяць: ім'я, Slack, місяць, кількість по кожному типу активності, activity breakdown, base coins, bonus і total coins.
+
+Інші таблиці технічні:
+
+- `Activity Submissions` зберігає кожну окрему активність і proof-файли;
+- `Activity Catalog` зберігає правила коінів, щоб не хардкодити їх у формі;
+- `Ambassadors` зберігає людей;
+- `Automation Log` не дає reminder/report дублюватися після рестарту Railway.
+
+Їх можна сховати в Notion page і щодня працювати лише з `Monthly Summary`.
 
 Activity Catalog сідається активностями зі скріну:
 

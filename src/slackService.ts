@@ -63,7 +63,7 @@ export class SlackService {
       .map((item) => `• ${item.activity.title}: ${item.quantity} × ${item.activity.coinsPerUnit} = ${item.baseCoins}`)
       .join("\n");
     const text = [
-      `Новий ambassador checklist: ${displaySlackNickname(params.slackNickname)} за ${monthDisplayName(params.month)}.`,
+      `Новий ambassador activity report: ${displaySlackNickname(params.slackNickname)} за ${monthDisplayName(params.month)}.`,
       lines,
       `Поточний total за місяць: ${params.totalCoins} coins.`
     ].join("\n");
@@ -73,7 +73,7 @@ export class SlackService {
 
   async sendMonthlyReminder(monthToReport: string, formUrl: string): Promise<void> {
     const text = [
-      `Нагадування: заповніть ambassador checklist за ${monthDisplayName(monthToReport)}.`,
+      `Нагадування: заповніть ambassador activity report за ${monthDisplayName(monthToReport)}.`,
       `Форма: ${formUrl}`
     ].join("\n");
 

@@ -4,7 +4,7 @@ const state = {
   bonusCoins: 10
 };
 
-const form = document.querySelector("#checklist-form");
+const form = document.querySelector("#activity-form");
 const activityContainer = document.querySelector("#activities");
 const template = document.querySelector("#activity-template");
 const monthSelect = document.querySelector("#month");
@@ -45,8 +45,10 @@ async function init() {
 function addActivityRow() {
   const node = template.content.firstElementChild.cloneNode(true);
   const select = node.querySelector(".activity-select");
-  select.innerHTML = state.activities
-    .map((activity) => `<option value="${activity.key}">${activity.title}</option>`)
+  select.innerHTML = [
+    '<option value="" disabled selected>Обери активність</option>',
+    ...state.activities.map((activity) => `<option value="${activity.key}">${activity.title}</option>`)
+  ]
     .join("");
 
   node.querySelector(".remove-activity").addEventListener("click", () => {
@@ -70,7 +72,11 @@ function rowToActivity(row) {
   const activityKey = row.querySelector(".activity-select").value;
   const activity = state.activities.find((item) => item.key === activityKey);
   const quantityInput = row.querySelector(".quantity-input");
-  const quantity = activity?.requiresQuantity ? Math.max(1, Number(quantityInput.value || 1)) : 1;
+  if (!activity) return { activity, quantity: 0 };
+  if (!activity.requiresQuantity) return { activity, quantity: 1 };
+
+  const parsedQuantity = Number(quantityInput.value);
+  const quantity = quantityInput.value !== "" && parsedQuantity > 0 ? parsedQuantity : 0;
   return { activity, quantity };
 }
 
@@ -86,14 +92,18 @@ function updateSummary() {
     const quantityInput = row.querySelector(".quantity-input");
     quantityLabel.hidden = !activity.requiresQuantity;
     quantityInput.required = activity.requiresQuantity;
-    quantityInput.value = activity.requiresQuantity ? quantityInput.value || "1" : "1";
+    if (!activity.requiresQuantity) {
+      quantityInput.value = "1";
+    }
 
     const proofInput = row.querySelector(".proof-input");
     proofInput.required = Boolean(activity.requiresProof);
 
     const rowTotal = quantity * activity.coinsPerUnit;
     subtotal += rowTotal;
-    distinctActivities.add(activity.key);
+    if (quantity > 0) {
+      distinctActivities.add(activity.key);
+    }
     row.querySelector(".activity-rate").textContent = `${quantity} × ${activity.coinsPerUnit} coins`;
     row.querySelector(".activity-total").textContent = rowTotal;
   });
@@ -117,14 +127,15 @@ async function submitForm(event) {
     const formData = new FormData();
     formData.set("ambassadorName", form.ambassadorName.value.trim());
     formData.set("slackNickname", form.slackNickname.value.trim());
-    formData.set("slackUserId", form.slackUserId.value.trim());
+    formData.set("slackUserId", "");
     formData.set("month", form.month.value);
 
     const activities = [];
     activityContainer.querySelectorAll(".activity-row").forEach((row, index) => {
       const activityKey = row.querySelector(".activity-select").value;
       const activity = state.activities.find((item) => item.key === activityKey);
-      const quantity = activity?.requiresQuantity ? Number(row.querySelector(".quantity-input").value || 1) : 1;
+      const quantityInput = row.querySelector(".quantity-input");
+      const quantity = activity?.requiresQuantity ? Number(quantityInput.value) : 1;
       activities.push({
         activityKey,
         quantity,
@@ -148,7 +159,7 @@ async function submitForm(event) {
 
     showResult(
       [
-        "Checklist submitted.",
+        "Форму відправлено.",
         "",
         payload.summary.reportLine,
         `Base coins: ${payload.summary.baseCoins}`,

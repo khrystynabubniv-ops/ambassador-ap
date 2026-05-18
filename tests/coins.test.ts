@@ -19,7 +19,7 @@ describe("coin calculation", () => {
       baseCoins: activity.coinsPerUnit
     }));
 
-    const summary = calculateMonthlySummary("2026-04", "anna", undefined, submittedActivities, {
+    const summary = calculateMonthlySummary("2026-04", undefined, "anna", undefined, submittedActivities, {
       bonusThreshold: 3,
       bonusCoins: 10,
       bonusDistinctBy: "activity"

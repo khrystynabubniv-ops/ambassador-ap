@@ -31,6 +31,7 @@ export type SubmittedActivity = {
 };
 
 export type MonthlySummary = {
+  ambassadorName?: string;
   month: string;
   slackNickname: string;
   slackUserId?: string;
@@ -39,6 +40,8 @@ export type MonthlySummary = {
   bonusCoins: number;
   totalCoins: number;
   reportLine: string;
+  activityQuantities: Record<string, number>;
+  activityBreakdown: string;
 };
 
 export type AutomationKind = "reminder" | "report";

@@ -61,6 +61,7 @@ export class AmbassadorProgram {
     );
     const summary = calculateMonthlySummary(
       normalizedInput.month,
+      normalizedInput.ambassadorName,
       normalizedInput.slackNickname,
       normalizedInput.slackUserId,
       allMonthlyActivities,
@@ -87,10 +88,10 @@ export class AmbassadorProgram {
     const lines = summaries.length
       ? summaries
           .sort((a, b) => b.totalCoins - a.totalCoins || a.slackNickname.localeCompare(b.slackNickname))
-          .map((summary) => summary.reportLine || `${displaySlackNickname(summary.slackNickname)} — ${summary.totalCoins} coins`)
+          .map((summary) => summary.reportLine || `${displaySlackNickname(summary.slackNickname)} - ${summary.totalCoins} coins`)
       : ["No submissions yet."];
 
-    return [`Ambassador coins report — ${monthDisplayName(month)}`, "", ...lines].join("\n");
+    return [`Ambassador coins report - ${monthDisplayName(month)}`, "", ...lines].join("\n");
   }
 
   async sendReminderIfDue(monthToReport: string, key: string): Promise<boolean> {

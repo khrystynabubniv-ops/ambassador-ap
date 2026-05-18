@@ -20,6 +20,7 @@ export function calculateActivityCoins(activity: Activity, quantity: number): nu
 
 export function calculateMonthlySummary(
   month: string,
+  ambassadorName: string | undefined,
   slackNickname: string,
   slackUserId: string | undefined,
   submittedActivities: SubmittedActivity[],
@@ -35,8 +36,23 @@ export function calculateMonthlySummary(
   const bonusCoins = distinctCompleted >= rules.bonusThreshold ? rules.bonusCoins : 0;
   const totalCoins = baseCoins + bonusCoins;
   const handle = slackNickname.startsWith("@") ? slackNickname : `@${slackNickname}`;
+  const activityQuantities = submittedActivities.reduce<Record<string, number>>((acc, item) => {
+    acc[item.activity.key] = (acc[item.activity.key] ?? 0) + item.quantity;
+    return acc;
+  }, {});
+  const activityBreakdown = Object.values(
+    submittedActivities.reduce<Record<string, { title: string; quantity: number; coins: number }>>((acc, item) => {
+      acc[item.activity.key] ??= { title: item.activity.title, quantity: 0, coins: 0 };
+      acc[item.activity.key].quantity += item.quantity;
+      acc[item.activity.key].coins += item.baseCoins;
+      return acc;
+    }, {})
+  )
+    .map((item) => `${item.title}: ${item.quantity} (${item.coins} coins)`)
+    .join("; ");
 
   return {
+    ambassadorName,
     month,
     slackNickname,
     slackUserId,
@@ -44,6 +60,8 @@ export function calculateMonthlySummary(
     distinctCompleted,
     bonusCoins,
     totalCoins,
-    reportLine: `${handle} - ${totalCoins} coins`
+    reportLine: `${handle} - ${totalCoins} coins`,
+    activityQuantities,
+    activityBreakdown
   };
 }

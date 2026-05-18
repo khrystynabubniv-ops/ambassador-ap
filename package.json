@@ -11,6 +11,7 @@
     "build": "node ./node_modules/typescript/bin/tsc",
     "start": "node dist/src/server.js",
     "setup:notion": "node ./node_modules/tsx/dist/cli.mjs scripts/setup-notion.ts",
+    "update:notion-summary": "node ./node_modules/tsx/dist/cli.mjs scripts/update-summary-schema.ts",
     "test": "node ./node_modules/vitest/vitest.mjs run",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit"
   },

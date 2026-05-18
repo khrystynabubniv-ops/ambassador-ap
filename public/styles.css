@@ -111,6 +111,11 @@ h2 {
   margin-bottom: 16px;
 }
 
+.grid.one {
+  grid-template-columns: 1fr;
+  margin-bottom: 16px;
+}
+
 .grid.compact {
   gap: 12px;
   margin-bottom: 12px;
@@ -137,6 +142,23 @@ textarea {
   outline: none;
 }
 
+input::placeholder,
+textarea::placeholder {
+  color: #a7afab;
+}
+
+select:invalid {
+  color: #a7afab;
+}
+
+select:valid {
+  color: var(--ink);
+}
+
+select option {
+  color: var(--ink);
+}
+
 textarea {
   resize: vertical;
 }
@@ -150,10 +172,6 @@ textarea:focus {
 
 .activity-header {
   margin: 26px 0 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
 }
 
 .activities {
@@ -192,8 +210,8 @@ textarea:focus {
 }
 
 .actions {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  gap: 12px;
   margin-top: 22px;
 }
 
@@ -216,9 +234,12 @@ button svg {
 }
 
 .primary-button {
-  padding: 0 18px;
+  min-height: 58px;
+  padding: 0 22px;
   background: var(--green);
   color: #fff;
+  font-size: 18px;
+  box-shadow: 0 12px 22px rgba(23, 106, 86, 0.22);
 }
 
 .primary-button:disabled {
@@ -226,11 +247,13 @@ button svg {
   cursor: progress;
 }
 
-.ghost-button {
-  padding: 0 14px;
+.add-button {
+  min-height: 50px;
+  padding: 0 18px;
   background: var(--soft);
   color: var(--green-dark);
-  border: 1px solid var(--line);
+  border: 1px solid rgba(23, 106, 86, 0.28);
+  box-shadow: 0 8px 16px rgba(23, 106, 86, 0.08);
 }
 
 .icon-button {
@@ -329,7 +352,8 @@ button svg {
   }
 
   .actions,
-  .primary-button {
+  .primary-button,
+  .add-button {
     width: 100%;
   }
 }
