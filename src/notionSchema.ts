@@ -1,4 +1,5 @@
 import type { Activity } from "./types.js";
+import { monthUkrainianName, monthsOfYear } from "./dates.js";
 
 const CATEGORY_OPTIONS = [
   { name: "Поширення", color: "blue" },
@@ -29,6 +30,24 @@ export const ACTIVITY_SUMMARY_PROPERTIES = [
   { key: "telegram_uni_career_hub_post", property: "Пости Uni Career Hub" },
   { key: "office_tour", property: "Екскурсії офісом" }
 ] as const;
+
+export const TRACKER_TITLE = "Ambassador Program Tracker 2026";
+
+export const TRACKER_PROPERTIES = {
+  title: "Учасник",
+  slack: "Slack",
+  month: "Місяць",
+  baseCoins: "Base coins",
+  bonusCoins: "Bonus",
+  totalCoins: "Total coins",
+  proofs: "Proofs",
+  updatedAt: "Оновлено"
+} as const;
+
+export const TRACKER_MONTH_OPTIONS = monthsOfYear(2026).map((month) => ({
+  name: monthUkrainianName(month),
+  color: "default"
+}));
 
 export const OLD_ACTIVITY_SUMMARY_PROPERTIES = [
   "Vacancy Chats Qty",
@@ -81,37 +100,15 @@ export const notionSchemas = {
     "Submitted At": { date: {} }
   },
   monthlySummary: {
-    Summary: { title: {} },
-    "Ambassador Name": { rich_text: {} },
-    Month: { date: {} },
-    "Month Name": {
-      select: {
-        options: [
-          { name: "January", color: "blue" },
-          { name: "February", color: "purple" },
-          { name: "March", color: "green" },
-          { name: "April", color: "yellow" },
-          { name: "May", color: "pink" },
-          { name: "June", color: "orange" },
-          { name: "July", color: "red" },
-          { name: "August", color: "blue" },
-          { name: "September", color: "purple" },
-          { name: "October", color: "green" },
-          { name: "November", color: "yellow" },
-          { name: "December", color: "pink" }
-        ]
-      }
-    },
-    "Slack Nickname": { rich_text: {} },
-    "Activity Breakdown": { rich_text: {} },
-    "Proof Files": { files: {} },
+    [TRACKER_PROPERTIES.title]: { title: {} },
+    [TRACKER_PROPERTIES.slack]: { rich_text: {} },
+    [TRACKER_PROPERTIES.month]: { select: { options: TRACKER_MONTH_OPTIONS } },
     ...ACTIVITY_SUMMARY_SCHEMA,
-    "Base Coins": { number: { format: "number" } },
-    "Completed Count": { number: { format: "number" } },
-    "Bonus Coins": { number: { format: "number" } },
-    "Total Coins": { number: { format: "number" } },
-    "Report Line": { rich_text: {} },
-    "Last Submitted At": { date: {} }
+    [TRACKER_PROPERTIES.baseCoins]: { number: { format: "number" } },
+    [TRACKER_PROPERTIES.bonusCoins]: { number: { format: "number" } },
+    [TRACKER_PROPERTIES.totalCoins]: { number: { format: "number" } },
+    [TRACKER_PROPERTIES.proofs]: { files: {} },
+    [TRACKER_PROPERTIES.updatedAt]: { date: {} }
   },
   automationLog: {
     Event: { title: {} },

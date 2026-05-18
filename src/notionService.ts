@@ -2,7 +2,7 @@ import type { AppConfig } from "./config.js";
 import type { Activity, AutomationKind, MonthlySummary, SubmissionInput, SubmittedActivity } from "./types.js";
 import { DEFAULT_ACTIVITIES } from "./activities.js";
 import { calculateActivityCoins } from "./coins.js";
-import { monthEnglishName, monthStart } from "./dates.js";
+import { monthFromUkrainianName, monthStart, monthUkrainianName } from "./dates.js";
 import {
   notionForm,
   notionJson,
@@ -15,7 +15,7 @@ import {
   titleText
 } from "./notionClient.js";
 import { displaySlackNickname, normalizeSlackNickname, truncateForNotion } from "./text.js";
-import { ACTIVITY_SUMMARY_PROPERTIES } from "./notionSchema.js";
+import { ACTIVITY_SUMMARY_PROPERTIES, TRACKER_PROPERTIES } from "./notionSchema.js";
 
 type NotionPage = {
   id: string;
@@ -155,15 +155,12 @@ export class NotionService {
     const proofs = await this.uploadProofFiles(proofFiles);
 
     const properties = {
-      Summary: titleText(`${summary.month} ${displaySlackNickname(summary.slackNickname)}`),
-      "Ambassador Name": richText(summary.ambassadorName ?? ""),
-      Month: { date: { start: monthStart(summary.month) } },
-      "Month Name": { select: { name: monthEnglishName(summary.month) } },
-      "Slack Nickname": richText(normalizeSlackNickname(summary.slackNickname)),
-      "Activity Breakdown": richText(truncateForNotion(summary.activityBreakdown)),
+      [TRACKER_PROPERTIES.title]: titleText(summary.ambassadorName || displaySlackNickname(summary.slackNickname)),
+      [TRACKER_PROPERTIES.slack]: richText(normalizeSlackNickname(summary.slackNickname)),
+      [TRACKER_PROPERTIES.month]: { select: { name: monthUkrainianName(summary.month) } },
       ...(proofs.length
         ? {
-            "Proof Files": {
+            [TRACKER_PROPERTIES.proofs]: {
               files: proofs.map((proof) => ({
                 name: proof.name,
                 type: "file_upload",
@@ -178,12 +175,10 @@ export class NotionService {
           { number: summary.activityQuantities[key] ?? 0 }
         ])
       ),
-      "Base Coins": { number: summary.baseCoins },
-      "Completed Count": { number: summary.distinctCompleted },
-      "Bonus Coins": { number: summary.bonusCoins },
-      "Total Coins": { number: summary.totalCoins },
-      "Report Line": richText(summary.reportLine),
-      ...(proofFiles.length ? { "Last Submitted At": { date: { start: new Date().toISOString() } } } : {})
+      [TRACKER_PROPERTIES.baseCoins]: { number: summary.baseCoins },
+      [TRACKER_PROPERTIES.bonusCoins]: { number: summary.bonusCoins },
+      [TRACKER_PROPERTIES.totalCoins]: { number: summary.totalCoins },
+      ...(proofFiles.length ? { [TRACKER_PROPERTIES.updatedAt]: { date: { start: new Date().toISOString() } } } : {})
     };
 
     if (existing) {
@@ -200,8 +195,8 @@ export class NotionService {
   async listMonthlySummaries(month: string): Promise<MonthlySummary[]> {
     this.requireDataSource("notionMonthlySummaryDataSourceId");
     const pages = (await queryDataSource(this.config, this.config.notionMonthlySummaryDataSourceId!, {
-      filter: { property: "Month", date: { equals: monthStart(month) } },
-      sorts: [{ property: "Total Coins", direction: "descending" }]
+      filter: { property: TRACKER_PROPERTIES.month, select: { equals: monthUkrainianName(month) } },
+      sorts: [{ property: TRACKER_PROPERTIES.totalCoins, direction: "descending" }]
     })) as NotionPage[];
 
     return pages.map((page) => ({
@@ -260,18 +255,35 @@ export class NotionService {
   }
 
   private summaryFromPage(page: NotionPage, fallbackMonth: string): MonthlySummary {
-    const month = propertyDate(page.properties.Month).slice(0, 7) || fallbackMonth;
-    const slackNickname = propertyPlainText(page.properties["Slack Nickname"]);
-    const totalCoins = propertyNumber(page.properties["Total Coins"]);
+    const selectedMonth = propertyPlainText(page.properties[TRACKER_PROPERTIES.month]);
+    const month =
+      monthFromUkrainianName(selectedMonth, Number(fallbackMonth.slice(0, 4))) ||
+      propertyDate(page.properties.Month).slice(0, 7) ||
+      fallbackMonth;
+    const slackNickname =
+      propertyPlainText(page.properties[TRACKER_PROPERTIES.slack]) ||
+      propertyPlainText(page.properties["Slack Nickname"]);
+    const totalCoins =
+      propertyNumber(page.properties[TRACKER_PROPERTIES.totalCoins]) ||
+      propertyNumber(page.properties["Total Coins"]);
     return {
-      ambassadorName: propertyPlainText(page.properties["Ambassador Name"]),
+      ambassadorName:
+        propertyPlainText(page.properties[TRACKER_PROPERTIES.title]) ||
+        propertyPlainText(page.properties["Ambassador Name"]),
       month,
       slackNickname,
-      baseCoins: propertyNumber(page.properties["Base Coins"]),
-      distinctCompleted: propertyNumber(page.properties["Completed Count"]),
-      bonusCoins: propertyNumber(page.properties["Bonus Coins"]),
+      baseCoins:
+        propertyNumber(page.properties[TRACKER_PROPERTIES.baseCoins]) ||
+        propertyNumber(page.properties["Base Coins"]),
+      distinctCompleted: ACTIVITY_SUMMARY_PROPERTIES.filter(
+        ({ property }) => propertyNumber(page.properties[property]) > 0
+      ).length,
+      bonusCoins:
+        propertyNumber(page.properties[TRACKER_PROPERTIES.bonusCoins]) ||
+        propertyNumber(page.properties["Bonus Coins"]),
       totalCoins,
-      reportLine: propertyPlainText(page.properties["Report Line"]) || `${displaySlackNickname(slackNickname)} - ${totalCoins} coins`,
+      reportLine:
+        propertyPlainText(page.properties["Report Line"]) || `${displaySlackNickname(slackNickname)} - ${totalCoins} coins`,
       activityQuantities: Object.fromEntries(
         ACTIVITY_SUMMARY_PROPERTIES.map(({ key, property }) => [key, propertyNumber(page.properties[property])])
       ),
@@ -311,8 +323,8 @@ export class NotionService {
   private async findSummaryPage(month: string, slackNickname: string): Promise<NotionPage | undefined> {
     return this.findFirst(this.config.notionMonthlySummaryDataSourceId!, {
       and: [
-        { property: "Month", date: { equals: monthStart(month) } },
-        { property: "Slack Nickname", rich_text: { equals: normalizeSlackNickname(slackNickname) } }
+        { property: TRACKER_PROPERTIES.month, select: { equals: monthUkrainianName(month) } },
+        { property: TRACKER_PROPERTIES.slack, rich_text: { equals: normalizeSlackNickname(slackNickname) } }
       ]
     });
   }

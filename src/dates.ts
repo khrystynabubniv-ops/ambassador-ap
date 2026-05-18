@@ -24,6 +24,20 @@ export function monthEnglishName(month: string): string {
   return DateTime.fromISO(`${month}-01`, { zone: "UTC" }).setLocale("en").toFormat("LLLL");
 }
 
+export function monthUkrainianName(month: string): string {
+  return DateTime.fromISO(`${month}-01`, { zone: "UTC" }).setLocale("uk").toFormat("LLLL");
+}
+
+export function monthFromUkrainianName(monthName: string, year: number): string | undefined {
+  const normalized = monthName.trim().toLocaleLowerCase("uk");
+  for (const month of monthsOfYear(year)) {
+    if (monthUkrainianName(month).toLocaleLowerCase("uk") === normalized) {
+      return month;
+    }
+  }
+  return undefined;
+}
+
 export function monthsOfYear(year: number): string[] {
   return Array.from({ length: 12 }, (_, index) => DateTime.utc(year, index + 1, 1).toFormat("yyyy-MM"));
 }
