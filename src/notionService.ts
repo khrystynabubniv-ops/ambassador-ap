@@ -2,7 +2,7 @@ import type { AppConfig } from "./config.js";
 import type { Activity, AutomationKind, MonthlySummary, SubmissionInput, SubmittedActivity } from "./types.js";
 import { DEFAULT_ACTIVITIES } from "./activities.js";
 import { calculateActivityCoins } from "./coins.js";
-import { monthStart } from "./dates.js";
+import { monthEnglishName, monthStart } from "./dates.js";
 import {
   notionForm,
   notionJson,
@@ -33,29 +33,12 @@ export class NotionService {
   isConfigured(): boolean {
     return Boolean(
       this.config.notionApiKey &&
-        this.config.notionAmbassadorsDataSourceId &&
-        this.config.notionActivityCatalogDataSourceId &&
-        this.config.notionSubmissionsDataSourceId &&
-        this.config.notionMonthlySummaryDataSourceId &&
-        this.config.notionAutomationLogDataSourceId
+        this.config.notionMonthlySummaryDataSourceId
     );
   }
 
   async listActivities(): Promise<Activity[]> {
-    if (!this.config.notionActivityCatalogDataSourceId || !this.config.notionApiKey) {
-      return DEFAULT_ACTIVITIES;
-    }
-
-    const pages = (await queryDataSource(this.config, this.config.notionActivityCatalogDataSourceId, {
-      sorts: [{ property: "Order", direction: "ascending" }]
-    })) as NotionPage[];
-
-    const activities = pages
-      .map((page) => this.activityFromPage(page))
-      .filter((activity) => activity.active)
-      .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
-
-    return activities.length ? activities : DEFAULT_ACTIVITIES;
+    return DEFAULT_ACTIVITIES;
   }
 
   async ensureAmbassador(input: SubmissionInput): Promise<void> {
@@ -160,22 +143,35 @@ export class NotionService {
       });
   }
 
-  async upsertMonthlySummary(summary: MonthlySummary): Promise<void> {
+  async getMonthlySummary(month: string, slackNickname: string): Promise<MonthlySummary | undefined> {
     this.requireDataSource("notionMonthlySummaryDataSourceId");
-    const existing = await this.findFirst(this.config.notionMonthlySummaryDataSourceId!, {
-      and: [
-        { property: "Month", date: { equals: monthStart(summary.month) } },
-        { property: "Slack Nickname", rich_text: { equals: normalizeSlackNickname(summary.slackNickname) } }
-      ]
-    });
+    const existing = await this.findSummaryPage(month, slackNickname);
+    return existing ? this.summaryFromPage(existing, month) : undefined;
+  }
+
+  async upsertMonthlySummary(summary: MonthlySummary, proofFiles: Express.Multer.File[] = []): Promise<void> {
+    this.requireDataSource("notionMonthlySummaryDataSourceId");
+    const existing = await this.findSummaryPage(summary.month, summary.slackNickname);
+    const proofs = await this.uploadProofFiles(proofFiles);
 
     const properties = {
       Summary: titleText(`${summary.month} ${displaySlackNickname(summary.slackNickname)}`),
       "Ambassador Name": richText(summary.ambassadorName ?? ""),
       Month: { date: { start: monthStart(summary.month) } },
+      "Month Name": { select: { name: monthEnglishName(summary.month) } },
       "Slack Nickname": richText(normalizeSlackNickname(summary.slackNickname)),
-      "Slack User ID": richText(summary.slackUserId ?? ""),
       "Activity Breakdown": richText(truncateForNotion(summary.activityBreakdown)),
+      ...(proofs.length
+        ? {
+            "Proof Files": {
+              files: proofs.map((proof) => ({
+                name: proof.name,
+                type: "file_upload",
+                file_upload: { id: proof.id }
+              }))
+            }
+          }
+        : {}),
       ...Object.fromEntries(
         ACTIVITY_SUMMARY_PROPERTIES.map(({ key, property }) => [
           property,
@@ -187,7 +183,7 @@ export class NotionService {
       "Bonus Coins": { number: summary.bonusCoins },
       "Total Coins": { number: summary.totalCoins },
       "Report Line": richText(summary.reportLine),
-      "Generated At": { date: { start: new Date().toISOString() } }
+      ...(proofFiles.length ? { "Last Submitted At": { date: { start: new Date().toISOString() } } } : {})
     };
 
     if (existing) {
@@ -209,47 +205,45 @@ export class NotionService {
     })) as NotionPage[];
 
     return pages.map((page) => ({
-      ambassadorName: propertyPlainText(page.properties["Ambassador Name"]),
-      month,
-      slackNickname: propertyPlainText(page.properties["Slack Nickname"]),
-      slackUserId: propertyPlainText(page.properties["Slack User ID"]),
-      baseCoins: propertyNumber(page.properties["Base Coins"]),
-      distinctCompleted: propertyNumber(page.properties["Completed Count"]),
-      bonusCoins: propertyNumber(page.properties["Bonus Coins"]),
-      totalCoins: propertyNumber(page.properties["Total Coins"]),
-      reportLine: propertyPlainText(page.properties["Report Line"]),
-      activityQuantities: Object.fromEntries(
-        ACTIVITY_SUMMARY_PROPERTIES.map(({ key, property }) => [key, propertyNumber(page.properties[property])])
-      ),
-      activityBreakdown: propertyPlainText(page.properties["Activity Breakdown"])
+      ...this.summaryFromPage(page, month),
+      month
     }));
   }
 
   async hasAutomationLog(kind: AutomationKind, key: string): Promise<boolean> {
-    this.requireDataSource("notionAutomationLogDataSourceId");
-    const existing = await this.findFirst(this.config.notionAutomationLogDataSourceId!, {
-      and: [
-        { property: "Kind", select: { equals: kind } },
-        { property: "Key", rich_text: { equals: key } }
-      ]
-    });
-    return Boolean(existing);
+    if (!this.config.notionAutomationLogDataSourceId) return false;
+    try {
+      const existing = await this.findFirst(this.config.notionAutomationLogDataSourceId, {
+        and: [
+          { property: "Kind", select: { equals: kind } },
+          { property: "Key", rich_text: { equals: key } }
+        ]
+      });
+      return Boolean(existing);
+    } catch (error) {
+      console.warn("Automation log is unavailable; continuing without log lookup.", error);
+      return false;
+    }
   }
 
   async logAutomationEvent(kind: AutomationKind, key: string, month: string, channel: string, payload: string): Promise<void> {
-    this.requireDataSource("notionAutomationLogDataSourceId");
-    await notionJson(this.config, "/v1/pages", "POST", {
-      parent: { type: "data_source_id", data_source_id: this.config.notionAutomationLogDataSourceId },
-      properties: {
-        Event: titleText(`${kind}:${key}`),
-        Kind: { select: { name: kind } },
-        Key: richText(key),
-        Month: { date: { start: monthStart(month) } },
-        "Sent At": { date: { start: new Date().toISOString() } },
-        Channel: richText(channel),
-        Payload: richText(truncateForNotion(payload))
-      }
-    });
+    if (!this.config.notionAutomationLogDataSourceId) return;
+    try {
+      await notionJson(this.config, "/v1/pages", "POST", {
+        parent: { type: "data_source_id", data_source_id: this.config.notionAutomationLogDataSourceId },
+        properties: {
+          Event: titleText(`${kind}:${key}`),
+          Kind: { select: { name: kind } },
+          Key: richText(key),
+          Month: { date: { start: monthStart(month) } },
+          "Sent At": { date: { start: new Date().toISOString() } },
+          Channel: richText(channel),
+          Payload: richText(truncateForNotion(payload))
+        }
+      });
+    } catch (error) {
+      console.warn("Automation log is unavailable; event was not logged.", error);
+    }
   }
 
   private activityFromPage(page: NotionPage): Activity {
@@ -262,6 +256,26 @@ export class NotionService {
       requiresProof: propertyCheckbox(page.properties["Requires Proof"]),
       active: propertyCheckbox(page.properties.Active),
       order: propertyNumber(page.properties.Order)
+    };
+  }
+
+  private summaryFromPage(page: NotionPage, fallbackMonth: string): MonthlySummary {
+    const month = propertyDate(page.properties.Month).slice(0, 7) || fallbackMonth;
+    const slackNickname = propertyPlainText(page.properties["Slack Nickname"]);
+    const totalCoins = propertyNumber(page.properties["Total Coins"]);
+    return {
+      ambassadorName: propertyPlainText(page.properties["Ambassador Name"]),
+      month,
+      slackNickname,
+      baseCoins: propertyNumber(page.properties["Base Coins"]),
+      distinctCompleted: propertyNumber(page.properties["Completed Count"]),
+      bonusCoins: propertyNumber(page.properties["Bonus Coins"]),
+      totalCoins,
+      reportLine: propertyPlainText(page.properties["Report Line"]) || `${displaySlackNickname(slackNickname)} - ${totalCoins} coins`,
+      activityQuantities: Object.fromEntries(
+        ACTIVITY_SUMMARY_PROPERTIES.map(({ key, property }) => [key, propertyNumber(page.properties[property])])
+      ),
+      activityBreakdown: propertyPlainText(page.properties["Activity Breakdown"])
     };
   }
 
@@ -292,6 +306,15 @@ export class NotionService {
   private async findFirst(dataSourceId: string, filter: Record<string, unknown>): Promise<NotionPage | undefined> {
     const results = (await queryDataSource(this.config, dataSourceId, { filter, page_size: 1 })) as NotionPage[];
     return results[0];
+  }
+
+  private async findSummaryPage(month: string, slackNickname: string): Promise<NotionPage | undefined> {
+    return this.findFirst(this.config.notionMonthlySummaryDataSourceId!, {
+      and: [
+        { property: "Month", date: { equals: monthStart(month) } },
+        { property: "Slack Nickname", rich_text: { equals: normalizeSlackNickname(slackNickname) } }
+      ]
+    });
   }
 
   private requireDataSource(key: keyof AppConfig): void {

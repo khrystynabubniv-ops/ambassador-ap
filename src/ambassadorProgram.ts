@@ -1,6 +1,6 @@
 import type { AppConfig } from "./config.js";
 import { calculateMonthlySummary, normalizeQuantity } from "./coins.js";
-import { monthDisplayName, previousMonth } from "./dates.js";
+import { monthDisplayName, monthsOfYear, previousMonth } from "./dates.js";
 import { NotionService, submittedActivityFromInput } from "./notionService.js";
 import { SlackService } from "./slackService.js";
 import { displaySlackNickname, normalizeSlackNickname } from "./text.js";
@@ -14,9 +14,10 @@ export class AmbassadorProgram {
   ) {}
 
   async getFormConfig() {
+    const year = Number(previousMonth(this.config.timezone).slice(0, 4));
     return {
       currentMonth: previousMonth(this.config.timezone),
-      months: await import("./dates.js").then((dates) => dates.recentMonths(this.config.timezone, 6)),
+      months: monthsOfYear(year),
       bonusThreshold: this.config.bonusThreshold,
       bonusCoins: this.config.bonusCoins,
       activities: await this.notion.listActivities()
@@ -35,9 +36,8 @@ export class AmbassadorProgram {
       slackNickname: normalizeSlackNickname(input.slackNickname)
     };
 
-    await this.notion.ensureAmbassador(normalizedInput);
-
     const submitted: SubmittedActivity[] = [];
+    const submittedFiles: Express.Multer.File[] = [];
     for (let index = 0; index < normalizedInput.activities.length; index += 1) {
       const activityInput = normalizedInput.activities[index];
       const activity = activityByKey.get(activityInput.activityKey);
@@ -51,14 +51,29 @@ export class AmbassadorProgram {
         throw new Error(`Proof files are required for: ${activity.title}`);
       }
 
-      await this.notion.createSubmissionActivity(normalizedInput, submittedActivity, filesByActivityIndex.get(index) ?? []);
+      submittedFiles.push(...(filesByActivityIndex.get(index) ?? []));
       submitted.push(submittedActivity);
     }
 
-    const allMonthlyActivities = await this.notion.listSubmittedActivities(
-      normalizedInput.month,
-      normalizedInput.slackNickname
-    );
+    const existingSummary = await this.notion.getMonthlySummary(normalizedInput.month, normalizedInput.slackNickname);
+    const mergedQuantities = { ...(existingSummary?.activityQuantities ?? {}) };
+    for (const item of submitted) {
+      mergedQuantities[item.activity.key] = (mergedQuantities[item.activity.key] ?? 0) + item.quantity;
+    }
+
+    const allMonthlyActivities = activities
+      .map((activity) => {
+        const quantity = mergedQuantities[activity.key] ?? 0;
+        return quantity > 0
+          ? {
+              activity,
+              quantity,
+              baseCoins: quantity * activity.coinsPerUnit
+            }
+          : undefined;
+      })
+      .filter((item): item is SubmittedActivity => Boolean(item));
+
     const summary = calculateMonthlySummary(
       normalizedInput.month,
       normalizedInput.ambassadorName,
@@ -72,7 +87,8 @@ export class AmbassadorProgram {
       }
     );
 
-    await this.notion.upsertMonthlySummary(summary);
+    await this.ensureYearRows(normalizedInput, activities);
+    await this.notion.upsertMonthlySummary(summary, submittedFiles);
     await this.slack.sendSubmissionNotification({
       month: normalizedInput.month,
       slackNickname: normalizedInput.slackNickname,
@@ -123,5 +139,22 @@ export class AmbassadorProgram {
     await this.slack.sendMonthlyReport(month, report);
     await this.notion.logAutomationEvent("report", key, month, channel, report);
     return true;
+  }
+
+  private async ensureYearRows(input: SubmissionInput, activities: Awaited<ReturnType<NotionService["listActivities"]>>): Promise<void> {
+    const year = Number(input.month.slice(0, 4));
+    for (const month of monthsOfYear(year)) {
+      const existing = await this.notion.getMonthlySummary(month, input.slackNickname);
+      if (existing) continue;
+
+      const summary = calculateMonthlySummary(month, input.ambassadorName, input.slackNickname, input.slackUserId, [], {
+        bonusThreshold: this.config.bonusThreshold,
+        bonusCoins: this.config.bonusCoins,
+        bonusDistinctBy: this.config.bonusDistinctBy
+      });
+
+      summary.activityQuantities = Object.fromEntries(activities.map((activity) => [activity.key, 0]));
+      await this.notion.upsertMonthlySummary(summary);
+    }
   }
 }

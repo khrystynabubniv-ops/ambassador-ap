@@ -9,7 +9,7 @@ type JsonBody = Record<string, unknown> | unknown[];
 export async function notionJson<T>(
   config: AppConfig,
   path: string,
-  method: "GET" | "POST" | "PATCH",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   body?: JsonBody
 ): Promise<T> {
   requireEnv("notionApiKey", config.notionApiKey);

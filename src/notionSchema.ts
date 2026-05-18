@@ -20,14 +20,25 @@ const AUTOMATION_KIND_OPTIONS = [
 ];
 
 export const ACTIVITY_SUMMARY_PROPERTIES = [
-  { key: "vacancy_student_chats", property: "Vacancy Chats Qty" },
-  { key: "events_internships_student_chats", property: "Event Chats Qty" },
-  { key: "teacher_contact", property: "Teacher Contacts Qty" },
-  { key: "own_university_lecture", property: "Own Lectures Qty" },
-  { key: "guest_lecture_coorganization", property: "Guest Lectures Qty" },
-  { key: "career_center_channel", property: "Career Center Qty" },
-  { key: "telegram_uni_career_hub_post", property: "Telegram Posts Qty" },
-  { key: "office_tour", property: "Office Tours Qty" }
+  { key: "vacancy_student_chats", property: "Вакансії в чатах" },
+  { key: "events_internships_student_chats", property: "Івенти/стажування в чатах" },
+  { key: "teacher_contact", property: "Контакти викладачів" },
+  { key: "own_university_lecture", property: "Власні лекції" },
+  { key: "guest_lecture_coorganization", property: "Гостьові лекції" },
+  { key: "career_center_channel", property: "Кар'єрні канали" },
+  { key: "telegram_uni_career_hub_post", property: "Пости Uni Career Hub" },
+  { key: "office_tour", property: "Екскурсії офісом" }
+] as const;
+
+export const OLD_ACTIVITY_SUMMARY_PROPERTIES = [
+  "Vacancy Chats Qty",
+  "Event Chats Qty",
+  "Teacher Contacts Qty",
+  "Own Lectures Qty",
+  "Guest Lectures Qty",
+  "Career Center Qty",
+  "Telegram Posts Qty",
+  "Office Tours Qty"
 ] as const;
 
 const ACTIVITY_SUMMARY_SCHEMA = Object.fromEntries(
@@ -73,16 +84,34 @@ export const notionSchemas = {
     Summary: { title: {} },
     "Ambassador Name": { rich_text: {} },
     Month: { date: {} },
+    "Month Name": {
+      select: {
+        options: [
+          { name: "January", color: "blue" },
+          { name: "February", color: "purple" },
+          { name: "March", color: "green" },
+          { name: "April", color: "yellow" },
+          { name: "May", color: "pink" },
+          { name: "June", color: "orange" },
+          { name: "July", color: "red" },
+          { name: "August", color: "blue" },
+          { name: "September", color: "purple" },
+          { name: "October", color: "green" },
+          { name: "November", color: "yellow" },
+          { name: "December", color: "pink" }
+        ]
+      }
+    },
     "Slack Nickname": { rich_text: {} },
-    "Slack User ID": { rich_text: {} },
     "Activity Breakdown": { rich_text: {} },
+    "Proof Files": { files: {} },
     ...ACTIVITY_SUMMARY_SCHEMA,
     "Base Coins": { number: { format: "number" } },
     "Completed Count": { number: { format: "number" } },
     "Bonus Coins": { number: { format: "number" } },
     "Total Coins": { number: { format: "number" } },
     "Report Line": { rich_text: {} },
-    "Generated At": { date: {} }
+    "Last Submitted At": { date: {} }
   },
   automationLog: {
     Event: { title: {} },
