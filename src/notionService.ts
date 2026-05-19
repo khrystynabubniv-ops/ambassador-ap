@@ -27,7 +27,14 @@ type UploadedProof = {
   name: string;
 };
 
+type NotionDatabase = {
+  data_sources?: Array<{ id: string; name?: string }>;
+};
+
 export class NotionService {
+  private activityTrackerDataSourceId?: string;
+  private activityTrackerSchemaReady = false;
+
   constructor(private readonly config: AppConfig) {}
 
   isConfigured(): boolean {
@@ -192,6 +199,36 @@ export class NotionService {
     });
   }
 
+  async upsertActivityTrackerFlag(summary: MonthlySummary): Promise<void> {
+    const dataSourceId = await this.ensureActivityTrackerSchema();
+    if (!dataSourceId) return;
+
+    const existing = await this.findSummaryPage(
+      summary.month,
+      summary.slackNickname,
+      summary.ambassadorName,
+      dataSourceId
+    );
+    const properties = {
+      [TRACKER_PROPERTIES.hasActivity]: { checkbox: summary.hasActivity }
+    };
+
+    if (existing) {
+      await notionJson(this.config, `/v1/pages/${existing.id}`, "PATCH", { properties });
+      return;
+    }
+
+    await notionJson(this.config, "/v1/pages", "POST", {
+      parent: { type: "data_source_id", data_source_id: dataSourceId },
+      properties: {
+        [TRACKER_PROPERTIES.title]: titleText(summary.ambassadorName || displaySlackNickname(summary.slackNickname)),
+        [TRACKER_PROPERTIES.slack]: richText(normalizeSlackNickname(summary.slackNickname)),
+        [TRACKER_PROPERTIES.month]: { select: { name: monthUkrainianName(summary.month) } },
+        ...properties
+      }
+    });
+  }
+
   async listMonthlySummaries(month: string): Promise<MonthlySummary[]> {
     this.requireDataSource("notionMonthlySummaryDataSourceId");
     const pages = (await queryDataSource(this.config, this.config.notionMonthlySummaryDataSourceId!, {
@@ -241,6 +278,22 @@ export class NotionService {
     }
   }
 
+  async ensureActivityTrackerSchema(): Promise<string | undefined> {
+    const dataSourceId = await this.resolveActivityTrackerDataSourceId();
+    if (!dataSourceId) return undefined;
+
+    if (!this.activityTrackerSchemaReady) {
+      await notionJson(this.config, `/v1/data_sources/${dataSourceId}`, "PATCH", {
+        properties: {
+          [TRACKER_PROPERTIES.hasActivity]: { checkbox: {} }
+        }
+      });
+      this.activityTrackerSchemaReady = true;
+    }
+
+    return dataSourceId;
+  }
+
   private activityFromPage(page: NotionPage): Activity {
     return {
       key: propertyPlainText(page.properties.Key),
@@ -269,26 +322,31 @@ export class NotionService {
     const totalCoins =
       propertyNumber(page.properties[TRACKER_PROPERTIES.totalCoins]) ||
       propertyNumber(page.properties["Total Coins"]);
+    const activityQuantities = Object.fromEntries(
+      ACTIVITY_SUMMARY_PROPERTIES.map(({ key, property }) => [key, propertyNumber(page.properties[property])])
+    );
+    const distinctCompleted = Object.values(activityQuantities).filter((quantity) => quantity > 0).length;
+    const hasActivity =
+      propertyCheckbox(page.properties[TRACKER_PROPERTIES.hasActivity]) ||
+      distinctCompleted > 0 ||
+      totalCoins > 0;
     const reportName = slackNickname ? displaySlackNickname(slackNickname) : ambassadorName;
     return {
       ambassadorName,
       month,
       slackNickname,
+      hasActivity,
       baseCoins:
         propertyNumber(page.properties[TRACKER_PROPERTIES.baseCoins]) ||
         propertyNumber(page.properties["Base Coins"]),
-      distinctCompleted: ACTIVITY_SUMMARY_PROPERTIES.filter(
-        ({ property }) => propertyNumber(page.properties[property]) > 0
-      ).length,
+      distinctCompleted,
       bonusCoins:
         propertyNumber(page.properties[TRACKER_PROPERTIES.bonusCoins]) ||
         propertyNumber(page.properties["Bonus Coins"]),
       totalCoins,
       reportLine:
         propertyPlainText(page.properties["Report Line"]) || `${reportName} - ${totalCoins} coins`,
-      activityQuantities: Object.fromEntries(
-        ACTIVITY_SUMMARY_PROPERTIES.map(({ key, property }) => [key, propertyNumber(page.properties[property])])
-      ),
+      activityQuantities,
       activityBreakdown: propertyPlainText(page.properties["Activity Breakdown"])
     };
   }
@@ -325,13 +383,14 @@ export class NotionService {
   private async findSummaryPage(
     month: string,
     slackNickname: string,
-    ambassadorName?: string
+    ambassadorName?: string,
+    dataSourceId = this.config.notionMonthlySummaryDataSourceId!
   ): Promise<NotionPage | undefined> {
     const monthFilter = { property: TRACKER_PROPERTIES.month, select: { equals: monthUkrainianName(month) } };
     const normalizedNickname = normalizeSlackNickname(slackNickname);
 
     if (normalizedNickname) {
-      const bySlack = await this.findFirst(this.config.notionMonthlySummaryDataSourceId!, {
+      const bySlack = await this.findFirst(dataSourceId, {
         and: [
           monthFilter,
           { property: TRACKER_PROPERTIES.slack, rich_text: { equals: normalizedNickname } }
@@ -342,7 +401,7 @@ export class NotionService {
 
     if (!ambassadorName) return undefined;
 
-    return this.findFirst(this.config.notionMonthlySummaryDataSourceId!, {
+    return this.findFirst(dataSourceId, {
       and: [
         monthFilter,
         { property: TRACKER_PROPERTIES.title, title: { equals: ambassadorName } }
@@ -353,6 +412,30 @@ export class NotionService {
   private requireDataSource(key: keyof AppConfig): void {
     if (!this.config.notionApiKey || !this.config[key]) {
       throw new Error(`Notion is not configured. Missing ${String(key)}.`);
+    }
+  }
+
+  private async resolveActivityTrackerDataSourceId(): Promise<string | undefined> {
+    if (!this.config.notionApiKey || !this.config.notionActivityTrackerId) {
+      return undefined;
+    }
+    if (this.activityTrackerDataSourceId) {
+      return this.activityTrackerDataSourceId;
+    }
+
+    const configuredId = this.config.notionActivityTrackerId;
+    try {
+      await notionJson(this.config, `/v1/data_sources/${configuredId}`, "GET");
+      this.activityTrackerDataSourceId = configuredId;
+      return configuredId;
+    } catch {
+      const database = await notionJson<NotionDatabase>(this.config, `/v1/databases/${configuredId}`, "GET");
+      const dataSourceId = database.data_sources?.[0]?.id;
+      if (!dataSourceId) {
+        throw new Error(`Could not resolve data source id from Notion database ${configuredId}.`);
+      }
+      this.activityTrackerDataSourceId = dataSourceId;
+      return dataSourceId;
     }
   }
 }

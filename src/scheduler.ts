@@ -28,6 +28,10 @@ export function startScheduler(config: AppConfig, program: AmbassadorProgram): v
     },
     { timezone: config.timezone }
   );
+
+  runDueAutomations(config, program).catch((error) => {
+    console.error("Startup automation reconciliation failed", error);
+  });
 }
 
 export async function runDueAutomations(config: AppConfig, program: AmbassadorProgram): Promise<void> {

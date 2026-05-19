@@ -35,6 +35,7 @@ export type MonthlySummary = {
   month: string;
   slackNickname: string;
   slackUserId?: string;
+  hasActivity: boolean;
   baseCoins: number;
   distinctCompleted: number;
   bonusCoins: number;

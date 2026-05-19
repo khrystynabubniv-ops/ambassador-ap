@@ -6,22 +6,26 @@ display_information:
   description: Student ambassador activity reports and coin summaries.
   background_color: "#165A4A"
 features:
+  app_home:
+    home_tab_enabled: true
+    messages_tab_enabled: false
+    messages_tab_read_only_enabled: false
   bot_user:
     display_name: Ambassador Coins
     always_online: false
-  slash_commands:
-    - command: /ambassador-report
-      url: https://ambassador-ap-production.up.railway.app/slack/commands
-      description: Generate the ambassador coins report.
-      usage_hint: "last | 2026-04"
-      should_escape: false
 oauth_config:
   scopes:
     bot:
       - chat:write
-      - commands
       - im:write
 settings:
+  event_subscriptions:
+    request_url: https://ambassador-ap-production.up.railway.app/slack/events
+    bot_events:
+      - app_home_opened
+  interactivity:
+    is_enabled: true
+    request_url: https://ambassador-ap-production.up.railway.app/slack/interactions
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false

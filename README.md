@@ -15,9 +15,9 @@ Polished version для студентської ambassador-програми:
 3. Кожна активність створюється окремим рядком у Notion `Activity Submissions`.
 4. Backend оновлює `Monthly Summary` для людини й місяця.
 5. Тобі приходить Slack notification про новий activity report.
-6. 1-го числа сервіс надсилає reminder у `student-ambassador-program`.
+6. 1-го числа сервіс надсилає reminder у `student-ambassador-program` з лінком на форму за попередній місяць.
 7. 5-го числа сервіс надсилає monthly report.
-8. Slash command `/ambassador-report last` або `/ambassador-report 2026-04` генерує copy-ready report.
+8. У Slack App Home є кнопки: відкрити форму, показати report, надіслати reminder і запостити monthly report.
 
 ## Notion бази
 
@@ -31,6 +31,9 @@ Polished version для студентської ambassador-програми:
 
 Головна робоча таблиця для менеджера: `Ambassador Program - Monthly Summary`.
 У ній є один рядок на людину й місяць: ім'я, Slack, місяць, кількість по кожному типу активності, activity breakdown, base coins, bonus і total coins.
+
+Поле `Є активність` додається не в технічну `Monthly Summary` schema, а в tracker-таблицю `Ambassador Program Tracker 2026`: `https://www.notion.so/66083f8f35264eeca6229a341e21be82?v=364ce9899cb781f99d45000c1ca22b6b&source=copy_link`.
+Для додаткового блоку/вʼю з активними учасниками створи linked view цієї tracker-таблиці, згрупуй або відфільтруй за `Місяць`, і додай filter `Є активність is checked`.
 
 Інші таблиці технічні:
 
@@ -80,7 +83,9 @@ npm run setup:notion
 
 1. Відкрий [Slack app manifests](https://api.slack.com/apps?new_app=1).
 2. Створи app from manifest і встав `slack/manifest.yaml`.
-3. Manifest уже налаштований на Railway URL: `https://ambassador-ap-production.up.railway.app/slack/commands`.
+3. Manifest уже налаштований на Railway URLs:
+   - `https://ambassador-ap-production.up.railway.app/slack/events` для App Home;
+   - `https://ambassador-ap-production.up.railway.app/slack/interactions` для кнопок.
 4. Install app to workspace.
 5. Скопіюй:
    - `SLACK_BOT_TOKEN` з OAuth tokens;
@@ -90,6 +95,7 @@ npm run setup:notion
 8. Створи або вибери приватний admin channel для пушів і репортів, додай туди бота, скопіюй ID в:
    - `SLACK_ADMIN_CHANNEL_ID`
    - `SLACK_REPORT_CHANNEL_ID`
+9. Після оновлення manifest перевстанови app у workspace, щоб Slack підтягнув App Home, Events і Interactivity.
 
 Для `SLACK_ADMIN_CHANNEL_ID` і `SLACK_REPORT_CHANNEL_ID` можна також використовувати Slack user ID формату `U...`; бот відкриє DM і надішле повідомлення напряму.
 
@@ -120,6 +126,7 @@ NOTION_AMBASSADORS_DATA_SOURCE_ID=
 NOTION_ACTIVITY_CATALOG_DATA_SOURCE_ID=
 NOTION_SUBMISSIONS_DATA_SOURCE_ID=
 NOTION_MONTHLY_SUMMARY_DATA_SOURCE_ID=
+NOTION_ACTIVITY_TRACKER_ID=66083f8f-3526-4eec-a622-9a341e21be82
 NOTION_AUTOMATION_LOG_DATA_SOURCE_ID=
 SLACK_BOT_TOKEN=
 SLACK_SIGNING_SECRET=
@@ -131,6 +138,7 @@ SLACK_REPORT_CHANNEL_ID=
 Optional:
 
 ```bash
+PROGRAM_DETAILS_URL=https://www.notion.so/Ambassador-program-for-students-2cbce9899cb78073b0b7f3e9df2bf82b?source=copy_link
 TIMEZONE=Europe/Kyiv
 REMINDER_DAY=1
 REMINDER_HOUR=9
@@ -142,6 +150,14 @@ BONUS_DISTINCT_BY=activity
 ```
 
 `BONUS_DISTINCT_BY=activity` означає 3 різні активності. Якщо треба рахувати 3 різні категорії, постав `category`.
+
+Якщо `Monthly Summary` вже існує, після деплою/перед наступними сабмітами запусти:
+
+```bash
+npm run update:notion-summary
+```
+
+Скрипт додасть `Є активність` у tracker-таблицю і backfill-ить існуючі рядки на основі coins/кількостей.
 
 ## Local run
 

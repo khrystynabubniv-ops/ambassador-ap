@@ -7,7 +7,7 @@ import { AmbassadorProgram } from "./ambassadorProgram.js";
 import { loadConfig } from "./config.js";
 import { previousMonth } from "./dates.js";
 import { NotionService } from "./notionService.js";
-import { SlackService } from "./slackService.js";
+import { SlackService, slackHomeActions } from "./slackService.js";
 import { startScheduler } from "./scheduler.js";
 
 declare global {
@@ -50,6 +50,36 @@ const SlackCommandSchema = z.object({
   command: z.string().optional()
 });
 
+const SlackEventSchema = z.object({
+  type: z.string(),
+  challenge: z.string().optional(),
+  event: z
+    .object({
+      type: z.string(),
+      user: z.string().optional(),
+      tab: z.string().optional()
+    })
+    .passthrough()
+    .optional()
+});
+
+const SlackInteractionSchema = z.object({
+  type: z.string(),
+  user: z.object({
+    id: z.string()
+  }),
+  actions: z
+    .array(
+      z
+        .object({
+          action_id: z.string(),
+          value: z.string().optional()
+        })
+        .passthrough()
+    )
+    .optional()
+});
+
 const config = loadConfig();
 const notion = new NotionService(config);
 const slack = new SlackService(config);
@@ -61,10 +91,10 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "https://unpkg.com"],
-        styleSrc: ["'self'", "https://fonts.googleapis.com"],
-        fontSrc: ["'self'", "https://fonts.gstatic.com"],
-        imgSrc: ["'self'", "data:"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.jsdelivr.net"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdn.jsdelivr.net", "data:"],
+        imgSrc: ["'self'", "data:", "blob:"],
         connectSrc: ["'self'"]
       }
     }
@@ -79,7 +109,13 @@ app.use(
     }
   })
 );
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as express.Request).rawBody = Buffer.from(buf);
+    }
+  })
+);
 
 app.get("/health", (_req, res) => {
   res.json({
@@ -152,11 +188,121 @@ app.post("/slack/commands", async (req, res, next) => {
   }
 });
 
+app.post("/slack/events", async (req, res, next) => {
+  try {
+    const valid = slack.verifyRequest(
+      req.rawBody,
+      req.header("x-slack-request-timestamp"),
+      req.header("x-slack-signature")
+    );
+
+    if (!valid) {
+      res.status(401).send("Invalid Slack signature");
+      return;
+    }
+
+    const payload = SlackEventSchema.parse(req.body);
+    if (payload.type === "url_verification") {
+      res.send(payload.challenge ?? "");
+      return;
+    }
+
+    res.sendStatus(200);
+    if (payload.type === "event_callback" && payload.event?.type === "app_home_opened" && payload.event.user) {
+      void publishSlackHome(payload.event.user).catch((error) => {
+        console.error("Failed to publish Slack App Home", error);
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/slack/interactions", async (req, res, next) => {
+  try {
+    const valid = slack.verifyRequest(
+      req.rawBody,
+      req.header("x-slack-request-timestamp"),
+      req.header("x-slack-signature")
+    );
+
+    if (!valid) {
+      res.status(401).send("Invalid Slack signature");
+      return;
+    }
+
+    const payload = SlackInteractionSchema.parse(JSON.parse(req.body.payload ?? "{}"));
+    res.sendStatus(200);
+    void handleSlackInteraction(payload).catch((error) => {
+      console.error("Failed to handle Slack interaction", error);
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(error);
   const message = error instanceof Error ? error.message : "Unexpected error";
   res.status(400).json({ ok: false, error: message });
 });
+
+async function handleSlackInteraction(payload: z.infer<typeof SlackInteractionSchema>): Promise<void> {
+  const action = payload.actions?.[0];
+  if (!action) return;
+
+  const month = action.value && /^\d{4}-\d{2}$/.test(action.value)
+    ? action.value
+    : previousMonth(config.timezone);
+
+  if (action.action_id === slackHomeActions.previewReport) {
+    const report = await program.buildMonthlyReport(month);
+    await publishSlackHome(payload.user.id, { month, reportText: report });
+    return;
+  }
+
+  if (action.action_id === slackHomeActions.postReport) {
+    const sent = await program.sendReportIfDue(month, `report:${month}`);
+    await publishSlackHome(payload.user.id, {
+      month,
+      notice: sent
+        ? `Report за ${month} надіслано в канал.`
+        : `Report за ${month} не надіслано: він уже був відправлений або report channel не налаштований.`
+    });
+    return;
+  }
+
+  if (action.action_id === slackHomeActions.sendReminder) {
+    const sent = await program.sendReminderIfDue(month, `reminder:${month}`);
+    await publishSlackHome(payload.user.id, {
+      month,
+      notice: sent
+        ? `Reminder за ${month} надіслано в ambassador channel.`
+        : `Reminder за ${month} не надіслано: він уже був відправлений або ambassador channel не налаштований.`
+    });
+    return;
+  }
+
+  if (action.action_id === slackHomeActions.refresh || action.action_id === slackHomeActions.openForm) {
+    await publishSlackHome(payload.user.id, { month, notice: `Home оновлено для ${month}.` });
+  }
+}
+
+async function publishSlackHome(
+  userId: string,
+  options: { month?: string; reportText?: string; notice?: string } = {}
+): Promise<void> {
+  const month = options.month ?? previousMonth(config.timezone);
+  const formUrl = config.publicBaseUrl ? program.formUrlForMonth(month) : undefined;
+  await slack.publishHome({
+    userId,
+    month,
+    formUrl,
+    detailsUrl: config.programDetailsUrl,
+    reportText: options.reportText,
+    notice: options.notice
+  });
+}
 
 app.listen(config.port, () => {
   console.log(`Ambassador app listening on ${config.port}`);

@@ -8,6 +8,10 @@ const optionalNumber = (fallback: number) =>
     .transform((value) => (value ? Number(value) : fallback))
     .pipe(z.number().int().positive());
 
+const DEFAULT_PROGRAM_DETAILS_URL =
+  "https://www.notion.so/Ambassador-program-for-students-2cbce9899cb78073b0b7f3e9df2bf82b?source=copy_link";
+const DEFAULT_ACTIVITY_TRACKER_ID = "66083f8f-3526-4eec-a622-9a341e21be82";
+
 const ConfigSchema = z.object({
   port: optionalNumber(3000),
   publicBaseUrl: z.string().url().optional(),
@@ -17,12 +21,14 @@ const ConfigSchema = z.object({
   notionActivityCatalogDataSourceId: z.string().optional(),
   notionSubmissionsDataSourceId: z.string().optional(),
   notionMonthlySummaryDataSourceId: z.string().optional(),
+  notionActivityTrackerId: z.string().optional().default(DEFAULT_ACTIVITY_TRACKER_ID),
   notionAutomationLogDataSourceId: z.string().optional(),
   slackBotToken: z.string().optional(),
   slackSigningSecret: z.string().optional(),
   slackAmbassadorChannelId: z.string().optional(),
   slackAdminChannelId: z.string().optional(),
   slackReportChannelId: z.string().optional(),
+  programDetailsUrl: z.string().url().default(DEFAULT_PROGRAM_DETAILS_URL),
   timezone: z.string().default("Europe/Kyiv"),
   reminderDay: optionalNumber(1),
   reminderHour: optionalNumber(9),
@@ -45,12 +51,14 @@ export function loadConfig(): AppConfig {
     notionActivityCatalogDataSourceId: process.env.NOTION_ACTIVITY_CATALOG_DATA_SOURCE_ID,
     notionSubmissionsDataSourceId: process.env.NOTION_SUBMISSIONS_DATA_SOURCE_ID,
     notionMonthlySummaryDataSourceId: process.env.NOTION_MONTHLY_SUMMARY_DATA_SOURCE_ID,
+    notionActivityTrackerId: process.env.NOTION_ACTIVITY_TRACKER_ID,
     notionAutomationLogDataSourceId: process.env.NOTION_AUTOMATION_LOG_DATA_SOURCE_ID,
     slackBotToken: process.env.SLACK_BOT_TOKEN,
     slackSigningSecret: process.env.SLACK_SIGNING_SECRET,
     slackAmbassadorChannelId: process.env.SLACK_AMBASSADOR_CHANNEL_ID,
     slackAdminChannelId: process.env.SLACK_ADMIN_CHANNEL_ID,
     slackReportChannelId: process.env.SLACK_REPORT_CHANNEL_ID,
+    programDetailsUrl: process.env.PROGRAM_DETAILS_URL,
     timezone: process.env.TIMEZONE ?? "Europe/Kyiv",
     reminderDay: process.env.REMINDER_DAY,
     reminderHour: process.env.REMINDER_HOUR,

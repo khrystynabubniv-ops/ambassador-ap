@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { AmbassadorProgram } from "../src/ambassadorProgram.js";
 import { DEFAULT_ACTIVITIES } from "../src/activities.js";
 import { calculateActivityCoins, calculateMonthlySummary, normalizeQuantity } from "../src/coins.js";
+import { monthlyReminderText } from "../src/slackService.js";
 
 describe("coin calculation", () => {
   it("multiplies quantity only for quantity-based activities", () => {
@@ -26,8 +28,49 @@ describe("coin calculation", () => {
     });
 
     expect(summary.baseCoins).toBe(20);
+    expect(summary.hasActivity).toBe(true);
     expect(summary.bonusCoins).toBe(10);
     expect(summary.totalCoins).toBe(30);
     expect(summary.reportLine).toBe("@anna - 30 coins");
+  });
+
+  it("marks empty monthly summary as no activity", () => {
+    const summary = calculateMonthlySummary("2026-04", undefined, "anna", undefined, [], {
+      bonusThreshold: 3,
+      bonusCoins: 10,
+      bonusDistinctBy: "activity"
+    });
+
+    expect(summary.hasActivity).toBe(false);
+  });
+
+  it("formats the monthly reminder message", () => {
+    const message = monthlyReminderText(
+      "2026-04",
+      "https://ambassador-ap-production.up.railway.app/?month=2026-04",
+      "https://www.notion.so/Ambassador-program-for-students-2cbce9899cb78073b0b7f3e9df2bf82b?source=copy_link"
+    );
+
+    expect(message).toContain("Привіт усім!");
+    expect(message).toContain("чекліст за квітень 2026");
+    expect(message).toContain("https://ambassador-ap-production.up.railway.app/?month=2026-04");
+    expect(message).toContain("юнікоіни");
+  });
+
+  it("keeps monthly reports focused on participants with activity", async () => {
+    const program = new AmbassadorProgram(
+      {} as any,
+      {
+        listMonthlySummaries: async () => [
+          { slackNickname: "anna", hasActivity: true, totalCoins: 30, reportLine: "@anna - 30 coins" },
+          { slackNickname: "maksym", hasActivity: false, totalCoins: 0, reportLine: "@maksym - 0 coins" }
+        ]
+      } as any,
+      {} as any
+    );
+
+    await expect(program.buildMonthlyReport("2026-04")).resolves.toBe(
+      "Ambassador coins report - квітень 2026\n\n@anna - 30 coins"
+    );
   });
 });

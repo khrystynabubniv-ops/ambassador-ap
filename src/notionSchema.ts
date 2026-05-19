@@ -40,11 +40,14 @@ export const TRACKER_PROPERTIES = {
   baseCoins: "Base coins",
   bonusCoins: "Bonus",
   totalCoins: "Total coins",
+  hasActivity: "Є активність",
   proofs: "Proofs",
   updatedAt: "Оновлено"
 } as const;
 
-export const TRACKER_MONTH_OPTIONS = monthsOfYear(2026).map((month) => ({
+const TRACKER_OPTION_MONTHS = [...monthsOfYear(2026).slice(2), ...monthsOfYear(2026).slice(0, 2)];
+
+export const TRACKER_MONTH_OPTIONS = TRACKER_OPTION_MONTHS.map((month) => ({
   name: monthUkrainianName(month),
   color: "default"
 }));

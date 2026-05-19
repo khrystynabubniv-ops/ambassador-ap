@@ -89,6 +89,7 @@ export class AmbassadorProgram {
 
     await this.ensureYearRows(normalizedInput, activities);
     await this.notion.upsertMonthlySummary(summary, submittedFiles);
+    await this.notion.upsertActivityTrackerFlag(summary);
     await this.slack.sendSubmissionNotification({
       month: normalizedInput.month,
       slackNickname: normalizedInput.slackNickname,
@@ -100,9 +101,9 @@ export class AmbassadorProgram {
   }
 
   async buildMonthlyReport(month: string): Promise<string> {
-    const summaries = await this.notion.listMonthlySummaries(month);
-    const lines = summaries.length
-      ? summaries
+    const activeSummaries = (await this.notion.listMonthlySummaries(month)).filter((summary) => summary.hasActivity);
+    const lines = activeSummaries.length
+      ? activeSummaries
           .sort((a, b) => b.totalCoins - a.totalCoins || a.slackNickname.localeCompare(b.slackNickname))
           .map((summary) => summary.reportLine || `${displaySlackNickname(summary.slackNickname)} - ${summary.totalCoins} coins`)
       : ["No submissions yet."];
@@ -119,7 +120,7 @@ export class AmbassadorProgram {
     }
 
     const formUrl = this.config.publicBaseUrl
-      ? `${this.config.publicBaseUrl}?month=${monthToReport}`
+      ? this.formUrlForMonth(monthToReport)
       : `Form URL is not configured. Set PUBLIC_BASE_URL.`;
     await this.slack.sendMonthlyReminder(monthToReport, formUrl);
     await this.notion.logAutomationEvent("reminder", key, monthToReport, this.config.slackAmbassadorChannelId, formUrl);
@@ -156,5 +157,11 @@ export class AmbassadorProgram {
       summary.activityQuantities = Object.fromEntries(activities.map((activity) => [activity.key, 0]));
       await this.notion.upsertMonthlySummary(summary);
     }
+  }
+
+  formUrlForMonth(month: string): string {
+    const url = new URL(this.config.publicBaseUrl!);
+    url.searchParams.set("month", month);
+    return url.toString();
   }
 }

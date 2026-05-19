@@ -33,6 +33,7 @@ export function calculateMonthlySummary(
       .map((item) => (rules.bonusDistinctBy === "category" ? item.activity.category : item.activity.key))
   );
   const distinctCompleted = distinctValues.size;
+  const hasActivity = distinctCompleted > 0;
   const bonusCoins = distinctCompleted >= rules.bonusThreshold ? rules.bonusCoins : 0;
   const totalCoins = baseCoins + bonusCoins;
   const handle = slackNickname.startsWith("@") ? slackNickname : `@${slackNickname}`;
@@ -56,6 +57,7 @@ export function calculateMonthlySummary(
     month,
     slackNickname,
     slackUserId,
+    hasActivity,
     baseCoins,
     distinctCompleted,
     bonusCoins,
