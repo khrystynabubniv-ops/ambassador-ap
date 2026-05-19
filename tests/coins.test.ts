@@ -5,6 +5,20 @@ import { calculateActivityCoins, calculateMonthlySummary, normalizeQuantity } fr
 import { monthlyReminderText } from "../src/slackService.js";
 
 describe("coin calculation", () => {
+  it("requires proof only for screenshot-marked activity types", () => {
+    const proofRequiredKeys = DEFAULT_ACTIVITIES
+      .filter((activity) => activity.requiresProof)
+      .map((activity) => activity.key);
+
+    expect(proofRequiredKeys).toEqual([
+      "vacancy_student_chats",
+      "events_internships_student_chats",
+      "teacher_contact",
+      "career_center_channel",
+      "telegram_uni_career_hub_post"
+    ]);
+  });
+
   it("multiplies quantity only for quantity-based activities", () => {
     const quantityActivity = DEFAULT_ACTIVITIES.find((activity) => activity.key === "vacancy_student_chats")!;
     const fixedActivity = DEFAULT_ACTIVITIES.find((activity) => activity.key === "own_university_lecture")!;

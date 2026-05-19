@@ -37,7 +37,7 @@ export const DEFAULT_ACTIVITIES: Activity[] = [
     category: "Виступи",
     coinsPerUnit: 50,
     requiresQuantity: false,
-    requiresProof: true,
+    requiresProof: false,
     active: true,
     order: 4
   },
@@ -47,7 +47,7 @@ export const DEFAULT_ACTIVITIES: Activity[] = [
     category: "Виступи",
     coinsPerUnit: 20,
     requiresQuantity: false,
-    requiresProof: true,
+    requiresProof: false,
     active: true,
     order: 5
   },
@@ -77,7 +77,7 @@ export const DEFAULT_ACTIVITIES: Activity[] = [
     category: "Екскурсії",
     coinsPerUnit: 15,
     requiresQuantity: false,
-    requiresProof: true,
+    requiresProof: false,
     active: true,
     order: 8
   }
