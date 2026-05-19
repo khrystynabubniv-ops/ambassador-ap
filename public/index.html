@@ -580,6 +580,7 @@
 
       .result {
         margin: 14px 20px 18px;
+        min-height: 70px;
         padding: 12px;
         border: 1px solid var(--line);
         border-radius: 8px;
@@ -588,6 +589,10 @@
         font-size: 12px;
         line-height: 1.45;
         white-space: pre-wrap;
+      }
+
+      .result:empty::before {
+        content: " ";
       }
 
       [hidden] {
@@ -723,7 +728,7 @@
             <strong id="total">0 coins</strong>
           </div>
         </div>
-        <pre id="result" class="result" role="status" hidden></pre>
+        <pre id="result" class="result" role="status" aria-live="polite"></pre>
       </aside>
     </main>
 
@@ -1114,7 +1119,7 @@
         event.preventDefault();
         state.validationAttempted = true;
         updateSummary();
-        resultEl.hidden = true;
+        clearResult();
 
         if (!isFormComplete()) {
           form.reportValidity();
@@ -1188,9 +1193,13 @@
       }
 
       function showResult(message, isError = false) {
-        resultEl.hidden = false;
         resultEl.textContent = message;
         resultEl.style.color = isError ? "#b84d5a" : "#0d473a";
+      }
+
+      function clearResult() {
+        resultEl.textContent = "";
+        resultEl.style.color = "#0d473a";
       }
     </script>
   </body>
