@@ -5,7 +5,7 @@ import path from "node:path";
 import { z } from "zod";
 import { AmbassadorProgram } from "./ambassadorProgram.js";
 import { loadConfig } from "./config.js";
-import { previousMonth } from "./dates.js";
+import { monthDisplayName, previousMonth } from "./dates.js";
 import { NotionService } from "./notionService.js";
 import { SlackService, slackHomeActions } from "./slackService.js";
 import { startScheduler } from "./scheduler.js";
@@ -260,7 +260,7 @@ async function handleSlackInteraction(payload: z.infer<typeof SlackInteractionSc
     await slack.sendReportToUser(payload.user.id, month, report);
     await publishSlackHome(payload.user.id, {
       month,
-      notice: `Report за ${month} надіслано тобі в Messages.`
+      notice: `Готово, звіт за ${monthDisplayName(month)} вже чекає на тебе в Messages.`
     });
     return;
   }
@@ -270,8 +270,8 @@ async function handleSlackInteraction(payload: z.infer<typeof SlackInteractionSc
     await publishSlackHome(payload.user.id, {
       month,
       notice: sent
-        ? `Reminder за ${month} надіслано в ambassador channel.`
-        : `Reminder за ${month} не надіслано: він уже був відправлений або ambassador channel не налаштований.`
+        ? `Готово, дружнє нагадування за ${monthDisplayName(month)} полетіло в ambassador channel.`
+        : `Нагадування за ${monthDisplayName(month)} не відправила: воно вже було надіслане або ambassador channel ще не налаштований.`
     });
     return;
   }

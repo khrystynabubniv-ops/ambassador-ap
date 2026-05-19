@@ -178,7 +178,10 @@ function buildHomeBlocks(params: HomeViewParams) {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `Період: *${monthDisplayName(params.month)}*. Я автоматично беру попередній місяць.`
+        text: [
+          `Привіт! Тут можна швидко керувати амбасадорськими коінами за *${monthDisplayName(params.month)}*.`,
+          "Період підставляю автоматично за попередній місяць, щоб тобі не доводилося шукати його вручну."
+        ].join("\n")
       }
     }
   ];
@@ -217,7 +220,7 @@ function buildHomeBlocks(params: HomeViewParams) {
         type: "button",
         text: {
           type: "plain_text",
-          text: "Отримати report"
+          text: "Отримати звіт"
         },
         action_id: HOME_ACTIONS.getReport,
         value: params.month,
@@ -227,13 +230,13 @@ function buildHomeBlocks(params: HomeViewParams) {
         type: "button",
         text: {
           type: "plain_text",
-          text: "Надіслати reminder"
+          text: "Надіслати нагадування"
         },
         action_id: HOME_ACTIONS.sendReminder,
         value: params.month,
         confirm: confirmDialog(
-          "Надіслати reminder?",
-          "Бот надішле дружнє нагадування в ambassador channel, якщо reminder за цей місяць ще не відправлявся."
+          "Надіслати нагадування?",
+          "Я напишу в ambassador channel м'яке нагадування, якщо за цей місяць воно ще не відправлялося."
         )
       }
     ]
@@ -245,7 +248,7 @@ function buildHomeBlocks(params: HomeViewParams) {
       elements: [
         {
           type: "mrkdwn",
-          text: `Деталі програми: <${params.detailsUrl}|Ambassador Program for Students>`
+          text: `Хочеш звірити правила? Ось деталі програми: <${params.detailsUrl}|Ambassador Program for Students>`
         }
       ]
     },
@@ -258,7 +261,7 @@ function buildHomeBlocks(params: HomeViewParams) {
     type: "section",
     text: {
       type: "mrkdwn",
-      text: "Натисни *Отримати report* — я надішлю його тобі в *Messages*."
+      text: "Потрібен звіт? Натисни *Отримати звіт*, і я одразу надішлю його тобі в *Messages*."
     }
   });
 
