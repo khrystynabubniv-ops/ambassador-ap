@@ -255,19 +255,12 @@ async function handleSlackInteraction(payload: z.infer<typeof SlackInteractionSc
     ? action.value
     : previousMonth(config.timezone);
 
-  if (action.action_id === slackHomeActions.previewReport) {
+  if (action.action_id === slackHomeActions.getReport) {
     const report = await program.buildMonthlyReport(month);
-    await publishSlackHome(payload.user.id, { month, reportText: report });
-    return;
-  }
-
-  if (action.action_id === slackHomeActions.postReport) {
-    const sent = await program.sendReportIfDue(month, `report:${month}`);
+    await slack.sendReportToUser(payload.user.id, month, report);
     await publishSlackHome(payload.user.id, {
       month,
-      notice: sent
-        ? `Report за ${month} надіслано в канал.`
-        : `Report за ${month} не надіслано: він уже був відправлений або report channel не налаштований.`
+      notice: `Report за ${month} надіслано тобі в Messages.`
     });
     return;
   }
@@ -283,14 +276,14 @@ async function handleSlackInteraction(payload: z.infer<typeof SlackInteractionSc
     return;
   }
 
-  if (action.action_id === slackHomeActions.refresh || action.action_id === slackHomeActions.openForm) {
-    await publishSlackHome(payload.user.id, { month, notice: `Home оновлено для ${month}.` });
+  if (action.action_id === slackHomeActions.openForm) {
+    await publishSlackHome(payload.user.id, { month });
   }
 }
 
 async function publishSlackHome(
   userId: string,
-  options: { month?: string; reportText?: string; notice?: string } = {}
+  options: { month?: string; notice?: string } = {}
 ): Promise<void> {
   const month = options.month ?? previousMonth(config.timezone);
   const formUrl = config.publicBaseUrl ? program.formUrlForMonth(month) : undefined;
@@ -299,7 +292,6 @@ async function publishSlackHome(
     month,
     formUrl,
     detailsUrl: config.programDetailsUrl,
-    reportText: options.reportText,
     notice: options.notice
   });
 }

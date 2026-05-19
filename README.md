@@ -17,7 +17,7 @@ Polished version для студентської ambassador-програми:
 5. Тобі приходить Slack notification про новий activity report.
 6. 1-го числа сервіс надсилає reminder у `student-ambassador-program` з лінком на форму за попередній місяць.
 7. 5-го числа сервіс надсилає monthly report.
-8. У Slack App Home є кнопки: відкрити форму, показати report, надіслати reminder і запостити monthly report.
+8. У Slack App Home є кнопки: відкрити форму, отримати report у Messages і надіслати reminder.
 
 ## Notion бази
 
@@ -95,7 +95,7 @@ npm run setup:notion
 8. Створи або вибери приватний admin channel для пушів і репортів, додай туди бота, скопіюй ID в:
    - `SLACK_ADMIN_CHANNEL_ID`
    - `SLACK_REPORT_CHANNEL_ID`
-9. Після оновлення manifest перевстанови app у workspace, щоб Slack підтягнув App Home, Events і Interactivity.
+9. Після оновлення manifest перевстанови app у workspace, щоб Slack підтягнув App Home, Messages, Events і Interactivity.
 
 Для `SLACK_ADMIN_CHANNEL_ID` і `SLACK_REPORT_CHANNEL_ID` можна також використовувати Slack user ID формату `U...`; бот відкриє DM і надішле повідомлення напряму.
 

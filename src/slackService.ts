@@ -6,9 +6,7 @@ import type { SubmittedActivity } from "./types.js";
 import { displaySlackNickname } from "./text.js";
 
 const HOME_ACTIONS = {
-  refresh: "ambassador_home_refresh",
-  previewReport: "ambassador_preview_report",
-  postReport: "ambassador_post_report",
+  getReport: "ambassador_get_report",
   sendReminder: "ambassador_send_reminder",
   openForm: "ambassador_open_form"
 } as const;
@@ -22,15 +20,19 @@ type HomeViewParams = {
   month: string;
   formUrl?: string;
   detailsUrl: string;
-  reportText?: string;
   notice?: string;
 };
 
 export function monthlyReminderText(monthToReport: string, formUrl: string, detailsUrl: string): string {
   return [
-    `Привіт усім! Новий місяць уже почався — настав час заповнити чекліст за ${monthDisplayName(monthToReport)}: ${formUrl}`,
+    "Привіт, амбасадори! ✨",
     "",
-    `Додавайте скріншоти виконаних активностей та отримуйте юнікоіни за свою залученість! Детальніше можете прочитати тут ${detailsUrl}!`
+    `Новий місяць уже почався, а це значить, що час заповнити чекліст за *${monthDisplayName(monthToReport)}* 💚`,
+    "",
+    `📝 <${formUrl}|Заповнити чекліст>`,
+    "📸 Додавайте скріншоти виконаних активностей та отримуйте юнікоіни за свою залученість.",
+    "",
+    `Деталі програми тут: <${detailsUrl}|Ambassador Program for Students> 🌟`
   ].join("\n");
 }
 
@@ -127,6 +129,13 @@ export class SlackService {
     await this.postMessage(channel, reportText);
   }
 
+  async sendReportToUser(userId: string, month: string, reportText: string): Promise<void> {
+    await this.postMessage(
+      userId,
+      [`Ось report за *${monthDisplayName(month)}* 📊`, "", `\`\`\`${reportText}\`\`\``].join("\n")
+    );
+  }
+
   async respondToSlackResponseUrl(responseUrl: string, text: string): Promise<void> {
     await fetch(responseUrl, {
       method: "POST",
@@ -169,7 +178,7 @@ function buildHomeBlocks(params: HomeViewParams) {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `Швидкі дії за *${monthDisplayName(params.month)}*.`
+        text: `Період: *${monthDisplayName(params.month)}*. Я автоматично беру попередній місяць.`
       }
     }
   ];
@@ -208,10 +217,11 @@ function buildHomeBlocks(params: HomeViewParams) {
         type: "button",
         text: {
           type: "plain_text",
-          text: "Показати report"
+          text: "Отримати report"
         },
-        action_id: HOME_ACTIONS.previewReport,
-        value: params.month
+        action_id: HOME_ACTIONS.getReport,
+        value: params.month,
+        style: "primary"
       },
       {
         type: "button",
@@ -223,31 +233,8 @@ function buildHomeBlocks(params: HomeViewParams) {
         value: params.month,
         confirm: confirmDialog(
           "Надіслати reminder?",
-          "Бот надішле повідомлення в ambassador channel, якщо reminder за цей місяць ще не відправлявся."
+          "Бот надішле дружнє нагадування в ambassador channel, якщо reminder за цей місяць ще не відправлявся."
         )
-      },
-      {
-        type: "button",
-        text: {
-          type: "plain_text",
-          text: "Запостити report"
-        },
-        action_id: HOME_ACTIONS.postReport,
-        value: params.month,
-        style: "primary",
-        confirm: confirmDialog(
-          "Запостити report?",
-          "Бот надішле monthly report у report channel, якщо report за цей місяць ще не відправлявся."
-        )
-      },
-      {
-        type: "button",
-        text: {
-          type: "plain_text",
-          text: "Оновити"
-        },
-        action_id: HOME_ACTIONS.refresh,
-        value: params.month
       }
     ]
   });
@@ -258,7 +245,7 @@ function buildHomeBlocks(params: HomeViewParams) {
       elements: [
         {
           type: "mrkdwn",
-          text: `Деталі програми: ${params.detailsUrl}`
+          text: `Деталі програми: <${params.detailsUrl}|Ambassador Program for Students>`
         }
       ]
     },
@@ -267,17 +254,13 @@ function buildHomeBlocks(params: HomeViewParams) {
     }
   );
 
-  if (params.reportText) {
-    blocks.push(...reportBlocks(params.reportText));
-  } else {
-    blocks.push({
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: "Натисни *Показати report*, щоб побачити список учасників із активністю за місяць."
-      }
-    });
-  }
+  blocks.push({
+    type: "section",
+    text: {
+      type: "mrkdwn",
+      text: "Натисни *Отримати report* — я надішлю його тобі в *Messages*."
+    }
+  });
 
   return blocks;
 }
@@ -301,31 +284,4 @@ function confirmDialog(title: string, text: string) {
       text: "Скасувати"
     }
   };
-}
-
-function reportBlocks(reportText: string) {
-  const chunks = chunkText(reportText, 2800);
-  return chunks.map((chunk, index) => ({
-    type: "section",
-    block_id: `report_${index}`,
-    text: {
-      type: "mrkdwn",
-      text: `\`\`\`${chunk}\`\`\``
-    }
-  }));
-}
-
-function chunkText(text: string, maxLength: number): string[] {
-  if (text.length <= maxLength) return [text];
-
-  const chunks: string[] = [];
-  let remaining = text;
-  while (remaining.length > maxLength) {
-    let splitAt = remaining.lastIndexOf("\n", maxLength);
-    if (splitAt < maxLength / 2) splitAt = maxLength;
-    chunks.push(remaining.slice(0, splitAt));
-    remaining = remaining.slice(splitAt).trimStart();
-  }
-  if (remaining) chunks.push(remaining);
-  return chunks;
 }

@@ -51,9 +51,10 @@ describe("coin calculation", () => {
       "https://www.notion.so/Ambassador-program-for-students-2cbce9899cb78073b0b7f3e9df2bf82b?source=copy_link"
     );
 
-    expect(message).toContain("Привіт усім!");
-    expect(message).toContain("чекліст за квітень 2026");
-    expect(message).toContain("https://ambassador-ap-production.up.railway.app/?month=2026-04");
+    expect(message).toContain("Привіт, амбасадори!");
+    expect(message).toContain("✨");
+    expect(message).toContain("чекліст за *квітень 2026*");
+    expect(message).toContain("<https://ambassador-ap-production.up.railway.app/?month=2026-04|Заповнити чекліст>");
     expect(message).toContain("юнікоіни");
   });
 
