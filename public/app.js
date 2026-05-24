@@ -191,5 +191,5 @@ async function submitForm(event) {
 function showResult(message, isError = false) {
   resultEl.hidden = false;
   resultEl.textContent = message;
-  resultEl.style.color = isError ? "#b84d5a" : "#0d473a";
+  resultEl.style.color = isError ? "#ed3732" : "#020202";
 }
