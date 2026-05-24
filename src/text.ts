@@ -1,5 +1,5 @@
 export function normalizeSlackNickname(value: string): string {
-  return value.trim().replace(/^@+/, "");
+  return value.trim().replace(/^@+/, "").trim().replace(/\s+/g, " ");
 }
 
 export function displaySlackNickname(value: string): string {

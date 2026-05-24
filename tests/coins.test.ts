@@ -3,6 +3,7 @@ import { AmbassadorProgram } from "../src/ambassadorProgram.js";
 import { DEFAULT_ACTIVITIES } from "../src/activities.js";
 import { calculateActivityCoins, calculateMonthlySummary, normalizeQuantity } from "../src/coins.js";
 import { monthlyReminderText } from "../src/slackService.js";
+import { displaySlackNickname, normalizeSlackNickname } from "../src/text.js";
 
 describe("coin calculation", () => {
   it("requires proof only for screenshot-marked activity types", () => {
@@ -46,6 +47,11 @@ describe("coin calculation", () => {
     expect(summary.bonusCoins).toBe(10);
     expect(summary.totalCoins).toBe(30);
     expect(summary.reportLine).toBe("@anna - 30 coins");
+  });
+
+  it("keeps spaces in Slack display names", () => {
+    expect(normalizeSlackNickname(" @Diana   Bondarenko ")).toBe("Diana Bondarenko");
+    expect(displaySlackNickname("Diana Bondarenko")).toBe("@Diana Bondarenko");
   });
 
   it("marks empty monthly summary as no activity", () => {

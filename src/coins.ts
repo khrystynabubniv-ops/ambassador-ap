@@ -1,4 +1,5 @@
 import type { Activity, MonthlySummary, SubmittedActivity } from "./types.js";
+import { displaySlackNickname } from "./text.js";
 
 export type CoinRules = {
   bonusThreshold: number;
@@ -36,7 +37,7 @@ export function calculateMonthlySummary(
   const hasActivity = distinctCompleted > 0;
   const bonusCoins = distinctCompleted >= rules.bonusThreshold ? rules.bonusCoins : 0;
   const totalCoins = baseCoins + bonusCoins;
-  const handle = slackNickname.startsWith("@") ? slackNickname : `@${slackNickname}`;
+  const handle = displaySlackNickname(slackNickname);
   const activityQuantities = submittedActivities.reduce<Record<string, number>>((acc, item) => {
     acc[item.activity.key] = (acc[item.activity.key] ?? 0) + item.quantity;
     return acc;
