@@ -506,6 +506,7 @@
       }
 
       .coins-hero {
+        position: relative;
         padding: 24px;
         background:
           linear-gradient(135deg, rgba(255, 224, 1, 0.16) 0%, rgba(245, 115, 35, 0.18) 52%, rgba(120, 97, 169, 0.3) 100%),
@@ -513,8 +514,16 @@
         color: #ffffff;
       }
 
+      .coins-topline {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
       .coins-label {
         display: block;
+        flex: 0 0 auto;
         color: rgba(255, 255, 255, 0.72);
         font-size: 12px;
         font-weight: 700;
@@ -522,37 +531,22 @@
         text-transform: uppercase;
       }
 
+      .coins-note {
+        max-width: 150px;
+        margin: 0;
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 10px;
+        font-weight: 400;
+        line-height: 1.28;
+        text-align: right;
+      }
+
       .coins-number {
         display: block;
-        margin-top: 10px;
+        margin-top: 14px;
         font-size: 58px;
         font-weight: 700;
         line-height: 0.95;
-      }
-
-      .coins-context {
-        display: block;
-        margin-top: 8px;
-        color: rgba(255, 255, 255, 0.72);
-        font-size: 12px;
-        font-weight: 400;
-      }
-
-      .progress-track {
-        height: 5px;
-        margin-top: 15px;
-        overflow: hidden;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.18);
-      }
-
-      .progress-fill {
-        display: block;
-        width: 0%;
-        height: 100%;
-        border-radius: inherit;
-        background: var(--brand-yellow);
-        transition: width 160ms ease;
       }
 
       .summary-lines {
@@ -715,12 +709,13 @@
 
       <aside class="coins-card" aria-label="Coins summary">
         <div class="coins-hero">
-          <span class="coins-label">Coins</span>
-          <strong class="coins-number" id="subtotal">0</strong>
-          <span class="coins-context">з 500 можливих</span>
-          <div class="progress-track" aria-hidden="true">
-            <span class="progress-fill" id="progress-fill"></span>
+          <div class="coins-topline">
+            <span class="coins-label">Coins</span>
+            <p class="coins-note">
+              Це орієнтовна кількість коінів. Точна кількість та видача відбуваються після перевірки EB-командою.
+            </p>
           </div>
+          <strong class="coins-number" id="subtotal">0</strong>
         </div>
         <div class="summary-lines">
           <div class="summary-row">
@@ -794,7 +789,6 @@
     </template>
 
     <script>
-      const MAX_COINS = 500;
       const MONTH_NAMES = [
         "Січень",
         "Лютий",
@@ -829,7 +823,6 @@
       const activityCountEl = document.querySelector("#activity-count");
       const bonusEl = document.querySelector("#bonus");
       const totalEl = document.querySelector("#total");
-      const progressFillEl = document.querySelector("#progress-fill");
       const resultEl = document.querySelector("#result");
 
       init().catch((error) => {
@@ -1047,7 +1040,6 @@
         activityCountEl.textContent = `${distinctActivities.size} шт.`;
         bonusEl.textContent = `${bonus} coins`;
         totalEl.textContent = `${total} coins`;
-        progressFillEl.style.width = `${Math.min(100, (total / MAX_COINS) * 100)}%`;
         updateSubmitState();
       }
 
