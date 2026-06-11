@@ -446,6 +446,11 @@
         gap: 6px;
       }
 
+      .file-warning-list {
+        display: grid;
+        gap: 6px;
+      }
+
       .file-item {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 26px;
@@ -455,6 +460,26 @@
         border: 1px solid var(--line);
         border-radius: 8px;
         background: #ffffff;
+      }
+
+      .file-warning-item {
+        display: grid;
+        gap: 3px;
+        padding: 9px 10px;
+        border: 1px solid #ffd3cf;
+        border-radius: 8px;
+        background: #fff1ef;
+        color: var(--danger);
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+
+      .file-warning-item small {
+        color: #8f312d;
+        font-size: 11px;
+        font-weight: 400;
+        line-height: 1.3;
       }
 
       .file-name {
@@ -845,6 +870,7 @@
               <span class="helper">PNG, JPG або PDF до ${MAX_PROOF_FILE_SIZE_MB} MB кожен</span>
             </label>
             <div class="file-list" hidden></div>
+            <div class="file-warning-list" hidden></div>
           </div>
         </div>
 
@@ -1126,6 +1152,7 @@
                 <span class="helper">Сторіз можеш не додавати. До ${MAX_EGC_PROOF_FILES} файлів у формі, до ${MAX_PROOF_FILE_SIZE_MB} MB кожен.</span>
               </label>
               <div class="file-list" hidden></div>
+              <div class="file-warning-list" hidden></div>
             </div>
           </div>
         `;
@@ -1512,6 +1539,7 @@
         });
 
         updateActivityRow(row);
+        renderRejectedFileList(row, input);
         updateSubmitState();
       }
 
@@ -1546,7 +1574,31 @@
           fileList.append(item);
         });
 
+        renderRejectedFileList(report, input);
         updateSubmitState();
+      }
+
+      function renderRejectedFileList(container, input) {
+        const warningList = container.querySelector(".file-warning-list");
+        const rejectedFiles = input._rejectedFiles || [];
+        if (!warningList) return;
+
+        warningList.replaceChildren();
+        warningList.hidden = rejectedFiles.length === 0;
+
+        rejectedFiles.forEach((item) => {
+          const warning = document.createElement("div");
+          warning.className = "file-warning-item";
+
+          const title = document.createElement("span");
+          title.textContent = `Не додано: ${item.name}`;
+
+          const reason = document.createElement("small");
+          reason.textContent = item.reason;
+
+          warning.append(title, reason);
+          warningList.append(warning);
+        });
       }
 
       function rememberFilesBeforePicker(input) {
@@ -1592,11 +1644,28 @@
         const oversizedFiles = maxFileSize ? files.filter((file) => file.size > maxFileSize) : [];
         const filesWithinSize = maxFileSize ? files.filter((file) => file.size <= maxFileSize) : files;
         const maxFiles = maxFilesForInput(input);
+        const rejectedFiles = oversizedFiles.map((file) => ({
+          name: file.name,
+          reason: `Файл більший за ${formatFileSize(maxFileSize)}. Стисни його або завантаж менший.`
+        }));
         if (!maxFiles || filesWithinSize.length <= maxFiles) {
-          return { files: filesWithinSize, tooManyFiles: false, oversizedFiles };
+          return { files: filesWithinSize, tooManyFiles: false, oversizedFiles, rejectedFiles };
         }
 
-        return { files: filesWithinSize.slice(0, maxFiles), tooManyFiles: true, oversizedFiles };
+        const acceptedFiles = filesWithinSize.slice(0, maxFiles);
+        const overflowFiles = filesWithinSize.slice(maxFiles);
+        return {
+          files: acceptedFiles,
+          tooManyFiles: true,
+          oversizedFiles,
+          rejectedFiles: [
+            ...rejectedFiles,
+            ...overflowFiles.map((file) => ({
+              name: file.name,
+              reason: `Можна додати максимум ${maxFiles} файлів. Цей файл не додано.`
+            }))
+          ]
+        };
       }
 
       function showFileLimitMessage(input, limitResult) {
@@ -1608,7 +1677,7 @@
         }
         if (limitResult.oversizedFiles.length && maxFileSize) {
           const names = limitResult.oversizedFiles.map((file) => file.name).join(", ");
-          messages.push(`Файл більший за ${formatFileSize(maxFileSize)}: ${names}. Стисни його або завантаж менший.`);
+          messages.push(`Не додано файл більший за ${formatFileSize(maxFileSize)}: ${names}. Стисни його або завантаж менший.`);
         }
         if (messages.length) {
           showResult(messages.join("\n"), true);
@@ -1624,6 +1693,7 @@
         const dataTransfer = new DataTransfer();
         limitedResult.files.forEach((file) => dataTransfer.items.add(file));
         input._filesBeforePicker = [];
+        input._rejectedFiles = limitedResult.rejectedFiles;
         input.files = dataTransfer.files;
         if (options.dispatchChange !== false) {
           input.dispatchEvent(new Event("change", { bubbles: true }));

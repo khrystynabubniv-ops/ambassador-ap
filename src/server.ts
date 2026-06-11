@@ -134,6 +134,7 @@ app.use(
 );
 app.use(express.static(publicDir));
 app.get(["/ambassador", "/egc"], (_req, res) => {
+  res.set("Cache-Control", "no-store");
   res.sendFile(path.join(publicDir, "index.html"));
 });
 app.use(
@@ -363,9 +364,25 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
     return;
   }
 
-  const message = error instanceof Error ? error.message : "Unexpected error";
+  const message = userFacingErrorMessage(error);
   res.status(400).json({ ok: false, error: message });
 });
+
+function userFacingErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : "Unexpected error";
+  if (message.includes("Notion") && message.includes("object_not_found") && message.includes("not find database")) {
+    const integrationMatch =
+      message.match(/integration \\"([^"\\]+)\\"/) ?? message.match(/integration "([^"]+)"/);
+    const integrationName = integrationMatch?.[1] ?? "Notion integration";
+    return [
+      "Не вдалося записати EGC форму в Notion.",
+      `База EGC турнір не підключена до інтеграції ${integrationName}.`,
+      "Відкрий сторінку EGC аналітика в Notion -> Connections і додай цю інтеграцію, або перевір EGC_NOTION_REPORTS_DATA_SOURCE_ID."
+    ].join(" ");
+  }
+
+  return message;
+}
 
 async function handleSlackInteraction(payload: z.infer<typeof SlackInteractionSchema>): Promise<void> {
   const action = payload.actions?.[0];
