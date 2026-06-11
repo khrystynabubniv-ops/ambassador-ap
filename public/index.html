@@ -322,6 +322,27 @@
         grid-column: 1 / -1;
       }
 
+      .egc-platform-divider {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        margin: 2px 0 -2px;
+        color: var(--brand-olive);
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.2;
+        text-transform: uppercase;
+      }
+
+      .egc-platform-divider::before,
+      .egc-platform-divider::after {
+        content: "";
+        height: 1px;
+        background: var(--line);
+      }
+
       .story-calendar {
         display: grid;
         gap: 8px;
@@ -1000,7 +1021,7 @@
         sectionTitle.textContent = "EGC звіт";
         addButton.hidden = true;
         activityCountLabel.textContent = "Полів з контентом";
-        bonusLabel.textContent = "Дні 3+ сторіз";
+        bonusLabel.textContent = "Дні 4+ сторіз";
         totalLabel.textContent = "До видачі";
         activityContainer.replaceChildren(buildEgcReportFields());
         state.egcStorySeriesDays = [];
@@ -1053,7 +1074,7 @@
             <label class="field">
               <span class="field-label">К-ть сторіз зі згадкою Universe в Instagram</span>
               <input class="egc-number" name="instagramStories" type="text" inputmode="numeric" pattern="[0-9]*" value="0" required />
-              <span class="helper">Якщо за день було 1-2 сторіз - порахуй їх тут. Якщо за день було 3+ сторіз - не додавай їх у це поле, а відміть цей день у календарі нижче.</span>
+              <span class="helper">Якщо за день було 1-3 сторіз - порахуй їх тут. Якщо за день було 4+ сторіз - не додавай їх у це поле, а відміть цей день у календарі нижче.</span>
             </label>
             <label class="field">
               <span class="field-label">К-ть сторіз з вакансією в Instagram</span>
@@ -1069,6 +1090,16 @@
               <span class="field-label">К-ть постів в Instagram</span>
               <input class="egc-number" name="instagramPosts" type="text" inputmode="numeric" pattern="[0-9]*" value="0" required />
             </label>
+            <div class="field egc-wide story-calendar">
+              <span class="field-label">Дні, коли було 4+ сторіз</span>
+              <div class="story-calendar-grid" data-calendar-weekdays></div>
+              <div class="story-calendar-grid" data-story-calendar></div>
+              <input name="instagramStorySeries" type="hidden" value="0" />
+              <span class="helper">Клікни дні місяця, у які було 4 або більше сторіз. За кожен такий день рахується 3 коіни.</span>
+            </div>
+            <div class="egc-platform-divider" aria-hidden="true">
+              <span>LinkedIn</span>
+            </div>
             <label class="field">
               <span class="field-label">К-ть постів в Лінкедін</span>
               <input class="egc-number" name="linkedinPosts" type="text" inputmode="numeric" pattern="[0-9]*" value="0" required />
@@ -1079,13 +1110,6 @@
               <input class="egc-number" name="linkedinVacancyPosts" type="text" inputmode="numeric" pattern="[0-9]*" value="0" required />
               <span class="helper">Пости, де є згадка, опис або посилання на нашу вакансію. Не дублюй їх у полі вище.</span>
             </label>
-            <div class="field egc-wide story-calendar">
-              <span class="field-label">Дні, коли було 3+ сторіз</span>
-              <div class="story-calendar-grid" data-calendar-weekdays></div>
-              <div class="story-calendar-grid" data-story-calendar></div>
-              <input name="instagramStorySeries" type="hidden" value="0" />
-              <span class="helper">Клікни дні місяця, у які було 3 або більше сторіз. За кожен такий день рахується максимум 3 коіни.</span>
-            </div>
             <div class="field egc-wide">
               <span class="field-label">Додай скріншоти постів і рілз</span>
               <label class="drop-zone" tabindex="0">
