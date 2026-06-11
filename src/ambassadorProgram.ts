@@ -4,8 +4,7 @@ import { NotionService, submittedActivityFromInput } from "./notionService.js";
 import { SlackService } from "./slackService.js";
 import { displaySlackNickname, normalizeSlackNickname } from "./text.js";
 import type { EgcReportInput, MonthlySummary, ProgramConfig, SubmissionInput, SubmittedActivity } from "./types.js";
-
-export const EGC_MAX_PROOF_FILES = 10;
+import { EGC_MAX_PROOF_FILES } from "./uploadLimits.js";
 
 export class RewardsProgram {
   constructor(

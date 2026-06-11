@@ -9,6 +9,7 @@ import { monthDisplayName, previousMonth } from "./dates.js";
 import { NotionService } from "./notionService.js";
 import { parseActionValue, SlackService, slackHomeActions } from "./slackService.js";
 import { startSchedulers } from "./scheduler.js";
+import { MAX_PROOF_FILE_SIZE_BYTES, MAX_PROOF_FILE_SIZE_MB } from "./uploadLimits.js";
 
 declare global {
   namespace Express {
@@ -23,7 +24,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     files: 50,
-    fileSize: 20 * 1024 * 1024
+    fileSize: MAX_PROOF_FILE_SIZE_BYTES
   }
 });
 
@@ -354,6 +355,14 @@ app.post("/slack/interactions", async (req, res, next) => {
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(error);
+  if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+    res.status(400).json({
+      ok: false,
+      error: `Один із файлів більший за ${MAX_PROOF_FILE_SIZE_MB} MB. Стисни файл або завантаж менший.`
+    });
+    return;
+  }
+
   const message = error instanceof Error ? error.message : "Unexpected error";
   res.status(400).json({ ok: false, error: message });
 });

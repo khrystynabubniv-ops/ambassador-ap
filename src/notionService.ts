@@ -22,6 +22,7 @@ import {
 } from "./notionClient.js";
 import { displaySlackNickname, normalizeSlackNickname, truncateForNotion } from "./text.js";
 import { activitySummaryProperties, TRACKER_PROPERTIES } from "./notionSchema.js";
+import { MAX_PROOF_FILE_SIZE_BYTES, MAX_PROOF_FILE_SIZE_MB } from "./uploadLimits.js";
 
 type NotionPage = {
   id: string;
@@ -557,8 +558,8 @@ export class NotionService {
     const uploads: UploadedProof[] = [];
 
     for (const file of files) {
-      if (file.size > 20 * 1024 * 1024) {
-        throw new Error(`${file.originalname} is larger than Notion's 20 MB single-upload limit.`);
+      if (file.size > MAX_PROOF_FILE_SIZE_BYTES) {
+        throw new Error(`${file.originalname} більший за ${MAX_PROOF_FILE_SIZE_MB} MB. Стисни файл або завантаж менший.`);
       }
 
       const created = await notionJson<{ id: string }>(this.config, "/v1/file_uploads", "POST", {

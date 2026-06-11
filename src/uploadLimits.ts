@@ -1,0 +1,3 @@
+export const MAX_PROOF_FILE_SIZE_MB = 20;
+export const MAX_PROOF_FILE_SIZE_BYTES = MAX_PROOF_FILE_SIZE_MB * 1024 * 1024;
+export const EGC_MAX_PROOF_FILES = 10;

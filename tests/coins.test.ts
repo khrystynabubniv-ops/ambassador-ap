@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { AmbassadorProgram, EGC_MAX_PROOF_FILES } from "../src/ambassadorProgram.js";
+import { AmbassadorProgram } from "../src/ambassadorProgram.js";
 import { DEFAULT_ACTIVITIES } from "../src/activities.js";
 import { calculateActivityCoins, calculateEgcCoins, calculateMonthlySummary, normalizeQuantity } from "../src/coins.js";
 import { loadConfig } from "../src/config.js";
 import { monthlyReminderText } from "../src/slackService.js";
 import { displaySlackNickname, normalizeSlackNickname } from "../src/text.js";
+import { EGC_MAX_PROOF_FILES } from "../src/uploadLimits.js";
 
 describe("coin calculation", () => {
   const ambassadorConfig = loadConfig().programs[0];
