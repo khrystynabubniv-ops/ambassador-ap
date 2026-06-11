@@ -1,8 +1,8 @@
 import "dotenv/config";
-import { DEFAULT_ACTIVITIES } from "../src/activities.js";
-import { loadConfig, requireEnv } from "../src/config.js";
+import { getProgramConfig, loadConfig, requireEnv } from "../src/config.js";
 import { notionJson } from "../src/notionClient.js";
-import { activityPageProperties, notionSchemas } from "../src/notionSchema.js";
+import { activityPageProperties, buildNotionSchemas } from "../src/notionSchema.js";
+import type { ProgramConfig } from "../src/types.js";
 
 type CreatedDatabase = {
   id: string;
@@ -16,45 +16,52 @@ type SetupResult = {
   dataSourceId: string;
 };
 
-const databases = [
+function databases(program: ProgramConfig) {
+  const schemas = buildNotionSchemas(program);
+  return [
   {
-    label: "Ambassadors",
-    envName: "NOTION_AMBASSADORS_DATA_SOURCE_ID",
-    schema: notionSchemas.ambassadors
+    label: "Participants",
+    envName: envName(program, "NOTION_PARTICIPANTS_DATA_SOURCE_ID", "NOTION_AMBASSADORS_DATA_SOURCE_ID"),
+    schema: schemas.participants
   },
   {
     label: "Activity Catalog",
-    envName: "NOTION_ACTIVITY_CATALOG_DATA_SOURCE_ID",
-    schema: notionSchemas.activityCatalog
+    envName: envName(program, "NOTION_ACTIVITY_CATALOG_DATA_SOURCE_ID"),
+    schema: schemas.activityCatalog
   },
   {
     label: "Activity Submissions",
-    envName: "NOTION_SUBMISSIONS_DATA_SOURCE_ID",
-    schema: notionSchemas.submissions
+    envName: envName(program, "NOTION_SUBMISSIONS_DATA_SOURCE_ID"),
+    schema: schemas.submissions
   },
   {
     label: "Monthly Summary",
-    envName: "NOTION_MONTHLY_SUMMARY_DATA_SOURCE_ID",
-    schema: notionSchemas.monthlySummary
+    envName: envName(program, "NOTION_MONTHLY_SUMMARY_DATA_SOURCE_ID"),
+    schema: schemas.monthlySummary
   },
   {
     label: "Automation Log",
-    envName: "NOTION_AUTOMATION_LOG_DATA_SOURCE_ID",
-    schema: notionSchemas.automationLog
+    envName: envName(program, "NOTION_AUTOMATION_LOG_DATA_SOURCE_ID"),
+    schema: schemas.automationLog
   }
-] as const;
+  ] as const;
+}
 
 async function main() {
   const config = loadConfig();
-  requireEnv("notionApiKey", config.notionApiKey);
-  requireEnv("notionParentPageId", config.notionParentPageId);
+  const program = getProgramConfig(config, programArg()) ?? config.programs[0];
+  if (program.mode === "egc-report") {
+    throw new Error("EGC uses the existing EGC турнір data source. Set EGC_NOTION_REPORTS_DATA_SOURCE_ID instead of running setup:notion.");
+  }
+  requireEnv(`${program.envPrefix ?? ""}NOTION_API_KEY`, program.notionApiKey);
+  requireEnv(`${program.envPrefix ?? ""}NOTION_PARENT_PAGE_ID`, program.notionParentPageId);
 
   const results: SetupResult[] = [];
 
-  for (const database of databases) {
-    const created = await notionJson<CreatedDatabase>(config, "/v1/databases", "POST", {
-      parent: { type: "page_id", page_id: config.notionParentPageId },
-      title: [{ type: "text", text: { content: `Ambassador Program - ${database.label}` } }],
+  for (const database of databases(program)) {
+    const created = await notionJson<CreatedDatabase>(program, "/v1/databases", "POST", {
+      parent: { type: "page_id", page_id: program.notionParentPageId },
+      title: [{ type: "text", text: { content: `${program.notionDatabasePrefix} - ${database.label}` } }],
       is_inline: false,
       initial_data_source: {
         properties: database.schema
@@ -79,14 +86,14 @@ async function main() {
     throw new Error("Activity Catalog was not created.");
   }
 
-  for (const activity of DEFAULT_ACTIVITIES) {
-    await notionJson(config, "/v1/pages", "POST", {
+  for (const activity of program.activities) {
+    await notionJson(program, "/v1/pages", "POST", {
       parent: { type: "data_source_id", data_source_id: activityCatalog.dataSourceId },
       properties: activityPageProperties(activity)
     });
   }
 
-  console.log("Created Notion databases and seeded Activity Catalog.");
+  console.log(`Created ${program.displayName} Notion databases and seeded Activity Catalog.`);
   console.log("");
   for (const result of results) {
     console.log(`${result.envName}=${result.dataSourceId}`);
@@ -96,6 +103,15 @@ async function main() {
   for (const result of results) {
     console.log(`${result.label}: ${result.databaseId}`);
   }
+}
+
+function programArg(): string {
+  const index = process.argv.findIndex((arg) => arg === "--program" || arg === "-p");
+  return index >= 0 ? process.argv[index + 1] : "ambassador";
+}
+
+function envName(program: ProgramConfig, name: string, legacyName = name): string {
+  return program.envPrefix ? `${program.envPrefix}${name}` : legacyName;
 }
 
 main().catch((error) => {

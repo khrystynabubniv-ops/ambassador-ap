@@ -1,8 +1,7 @@
 import "dotenv/config";
 import fs from "node:fs";
-import { DEFAULT_ACTIVITIES } from "../src/activities.js";
 import { calculateMonthlySummary } from "../src/coins.js";
-import { loadConfig, requireEnv } from "../src/config.js";
+import { getProgramConfig, loadConfig, requireEnv } from "../src/config.js";
 import { monthsOfYear } from "../src/dates.js";
 import {
   notionJson,
@@ -11,8 +10,9 @@ import {
   propertyPlainText,
   queryDataSource
 } from "../src/notionClient.js";
-import { notionSchemas, TRACKER_TITLE } from "../src/notionSchema.js";
+import { buildNotionSchemas } from "../src/notionSchema.js";
 import { NotionService } from "../src/notionService.js";
+import type { ProgramConfig } from "../src/types.js";
 
 const YEAR = 2026;
 
@@ -29,23 +29,27 @@ type Participant = {
 
 async function main() {
   const config = loadConfig();
-  requireEnv("notionApiKey", config.notionApiKey);
-  requireEnv("notionParentPageId", config.notionParentPageId);
+  const program = getProgramConfig(config, programArg()) ?? config.programs[0];
+  if (program.mode === "egc-report") {
+    throw new Error("EGC uses the existing EGC аналітика data source; rebuild:yearly-tracker is only for activity-based programs.");
+  }
+  requireEnv(`${program.envPrefix ?? ""}NOTION_API_KEY`, program.notionApiKey);
+  requireEnv(`${program.envPrefix ?? ""}NOTION_PARENT_PAGE_ID`, program.notionParentPageId);
 
-  const participants = await collectParticipants(config);
-  const quantitiesByPersonMonth = await collectSubmissionQuantities(config, participants);
-  const oldTrackerRows = config.notionMonthlySummaryDataSourceId
-    ? ((await safeQuery(config, config.notionMonthlySummaryDataSourceId)) as NotionPage[])
+  const participants = await collectParticipants(program);
+  const quantitiesByPersonMonth = await collectSubmissionQuantities(program, participants);
+  const oldTrackerRows = program.notionMonthlySummaryDataSourceId
+    ? ((await safeQuery(program, program.notionMonthlySummaryDataSourceId)) as NotionPage[])
     : [];
-  mergeOldTrackerRows(oldTrackerRows, participants, quantitiesByPersonMonth);
+  mergeOldTrackerRows(program, oldTrackerRows, participants, quantitiesByPersonMonth);
 
-  await archiveHubChildren(config);
-  const created = await notionJson<any>(config, "/v1/databases", "POST", {
-    parent: { type: "page_id", page_id: config.notionParentPageId },
-    title: [{ type: "text", text: { content: TRACKER_TITLE } }],
+  await archiveHubChildren(program);
+  const created = await notionJson<any>(program, "/v1/databases", "POST", {
+    parent: { type: "page_id", page_id: program.notionParentPageId },
+    title: [{ type: "text", text: { content: program.trackerTitle } }],
     is_inline: false,
     initial_data_source: {
-      properties: notionSchemas.monthlySummary
+      properties: buildNotionSchemas(program).monthlySummary
     }
   });
 
@@ -54,14 +58,14 @@ async function main() {
     throw new Error("Could not resolve new tracker data source id.");
   }
 
-  config.notionMonthlySummaryDataSourceId = dataSourceId;
-  updateLocalEnv("NOTION_MONTHLY_SUMMARY_DATA_SOURCE_ID", dataSourceId);
+  program.notionMonthlySummaryDataSourceId = dataSourceId;
+  updateLocalEnv(envName(program, "NOTION_MONTHLY_SUMMARY_DATA_SOURCE_ID"), dataSourceId);
 
-  const notion = new NotionService(config);
+  const notion = new NotionService(program);
   for (const participant of participants.values()) {
     for (const month of monthsOfYear(YEAR)) {
       const quantities = quantitiesByPersonMonth.get(groupKey(participant.slackNickname, month)) ?? {};
-      const submittedActivities = DEFAULT_ACTIVITIES.map((activity) => {
+      const submittedActivities = program.activities.map((activity) => {
         const quantity = quantities[activity.key] ?? 0;
         return quantity > 0 ? { activity, quantity, baseCoins: quantity * activity.coinsPerUnit } : undefined;
       }).filter((item): item is NonNullable<typeof item> => Boolean(item));
@@ -73,24 +77,24 @@ async function main() {
         participant.slackUserId,
         submittedActivities,
         {
-          bonusThreshold: config.bonusThreshold,
-          bonusCoins: config.bonusCoins,
-          bonusDistinctBy: config.bonusDistinctBy
+          bonusThreshold: program.bonusThreshold,
+          bonusCoins: program.bonusCoins,
+          bonusDistinctBy: program.bonusDistinctBy
         }
       );
       await notion.upsertMonthlySummary(summary);
     }
   }
 
-  console.log(`Created clean tracker: ${TRACKER_TITLE}`);
-  console.log(`NOTION_MONTHLY_SUMMARY_DATA_SOURCE_ID=${dataSourceId}`);
+  console.log(`Created clean tracker: ${program.trackerTitle}`);
+  console.log(`${envName(program, "NOTION_MONTHLY_SUMMARY_DATA_SOURCE_ID")}=${dataSourceId}`);
 }
 
-async function collectParticipants(config: ReturnType<typeof loadConfig>): Promise<Map<string, Participant>> {
+async function collectParticipants(config: ProgramConfig): Promise<Map<string, Participant>> {
   const participants = new Map<string, Participant>();
 
-  if (config.notionAmbassadorsDataSourceId) {
-    for (const row of (await safeQuery(config, config.notionAmbassadorsDataSourceId)) as NotionPage[]) {
+  if (config.notionParticipantsDataSourceId) {
+    for (const row of (await safeQuery(config, config.notionParticipantsDataSourceId)) as NotionPage[]) {
       upsertParticipant(participants, {
         name: propertyPlainText(row.properties.Name),
         slackNickname: propertyPlainText(row.properties["Slack Nickname"]),
@@ -102,7 +106,9 @@ async function collectParticipants(config: ReturnType<typeof loadConfig>): Promi
   if (config.notionSubmissionsDataSourceId) {
     for (const row of (await safeQuery(config, config.notionSubmissionsDataSourceId)) as NotionPage[]) {
       upsertParticipant(participants, {
-        name: propertyPlainText(row.properties["Ambassador Name"]),
+        name:
+          propertyPlainText(row.properties["Participant Name"]) ||
+          propertyPlainText(row.properties["Ambassador Name"]),
         slackNickname: propertyPlainText(row.properties["Slack Nickname"]),
         slackUserId: propertyPlainText(row.properties["Slack User ID"]) || undefined
       });
@@ -114,6 +120,7 @@ async function collectParticipants(config: ReturnType<typeof loadConfig>): Promi
       upsertParticipant(participants, {
         name:
           propertyPlainText(row.properties["Учасник"]) ||
+          propertyPlainText(row.properties["Participant Name"]) ||
           propertyPlainText(row.properties["Ambassador Name"]),
         slackNickname:
           propertyPlainText(row.properties.Slack) ||
@@ -130,7 +137,7 @@ async function collectParticipants(config: ReturnType<typeof loadConfig>): Promi
 }
 
 async function collectSubmissionQuantities(
-  config: ReturnType<typeof loadConfig>,
+  config: ProgramConfig,
   participants: Map<string, Participant>
 ): Promise<Map<string, Record<string, number>>> {
   const groups = new Map<string, Record<string, number>>();
@@ -143,7 +150,9 @@ async function collectSubmissionQuantities(
     if (!month.startsWith(`${YEAR}-`) || !activityKey || !slackNickname) continue;
 
     upsertParticipant(participants, {
-      name: propertyPlainText(row.properties["Ambassador Name"]),
+      name:
+        propertyPlainText(row.properties["Participant Name"]) ||
+        propertyPlainText(row.properties["Ambassador Name"]),
       slackNickname,
       slackUserId: propertyPlainText(row.properties["Slack User ID"]) || undefined
     });
@@ -158,6 +167,7 @@ async function collectSubmissionQuantities(
 }
 
 function mergeOldTrackerRows(
+  config: ProgramConfig,
   rows: NotionPage[],
   participants: Map<string, Participant>,
   groups: Map<string, Record<string, number>>
@@ -174,14 +184,15 @@ function mergeOldTrackerRows(
     upsertParticipant(participants, {
       name:
         propertyPlainText(row.properties["Учасник"]) ||
+        propertyPlainText(row.properties["Participant Name"]) ||
         propertyPlainText(row.properties["Ambassador Name"]),
       slackNickname
     });
 
     const key = groupKey(slackNickname, month);
     const quantities = groups.get(key) ?? {};
-    for (const activity of DEFAULT_ACTIVITIES) {
-      const property = activityProperty(activity.key);
+    for (const activity of config.activities) {
+      const property = activity.summaryProperty;
       if (!property) continue;
       quantities[activity.key] = Math.max(quantities[activity.key] ?? 0, propertyNumber(row.properties[property]));
     }
@@ -189,14 +200,14 @@ function mergeOldTrackerRows(
   }
 }
 
-async function archiveHubChildren(config: ReturnType<typeof loadConfig>) {
+async function archiveHubChildren(config: ProgramConfig) {
   const children = await listChildBlocks(config, config.notionParentPageId!);
   for (const block of children) {
     await notionJson(config, `/v1/blocks/${block.id}`, "DELETE");
   }
 }
 
-async function listChildBlocks(config: ReturnType<typeof loadConfig>, blockId: string): Promise<any[]> {
+async function listChildBlocks(config: ProgramConfig, blockId: string): Promise<any[]> {
   const results: any[] = [];
   let startCursor: string | undefined;
   do {
@@ -211,7 +222,7 @@ async function listChildBlocks(config: ReturnType<typeof loadConfig>, blockId: s
   return results;
 }
 
-async function safeQuery(config: ReturnType<typeof loadConfig>, dataSourceId: string): Promise<unknown[]> {
+async function safeQuery(config: ProgramConfig, dataSourceId: string): Promise<unknown[]> {
   try {
     return await queryDataSource(config, dataSourceId);
   } catch {
@@ -230,21 +241,17 @@ function upsertParticipant(participants: Map<string, Participant>, participant: 
   });
 }
 
-function activityProperty(activityKey: string): string | undefined {
-  return {
-    vacancy_student_chats: "Вакансії в чатах",
-    events_internships_student_chats: "Івенти/стажування в чатах",
-    teacher_contact: "Контакти викладачів",
-    own_university_lecture: "Власні лекції",
-    guest_lecture_coorganization: "Гостьові лекції",
-    career_center_channel: "Кар'єрні канали",
-    telegram_uni_career_hub_post: "Пости Uni Career Hub",
-    office_tour: "Екскурсії офісом"
-  }[activityKey];
-}
-
 function groupKey(slackNickname: string, month: string): string {
   return `${normalizeNickname(slackNickname)}:${month}`;
+}
+
+function programArg(): string {
+  const index = process.argv.findIndex((arg) => arg === "--program" || arg === "-p");
+  return index >= 0 ? process.argv[index + 1] : "ambassador";
+}
+
+function envName(program: ProgramConfig, name: string): string {
+  return program.envPrefix ? `${program.envPrefix}${name}` : name;
 }
 
 function normalizeNickname(slackNickname: string): string {

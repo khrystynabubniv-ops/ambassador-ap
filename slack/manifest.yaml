@@ -2,8 +2,8 @@ _metadata:
   major_version: 2
   minor_version: 1
 display_information:
-  name: Ambassador Coins
-  description: Student ambassador activity reports and coin summaries.
+  name: Program Coins
+  description: Rewards reports and reminders for Ambassador and EGC programs.
   background_color: "#165A4A"
 features:
   app_home:
@@ -11,7 +11,7 @@ features:
     messages_tab_enabled: true
     messages_tab_read_only_enabled: false
   bot_user:
-    display_name: Ambassador Coins
+    display_name: Program Coins
     always_online: false
 oauth_config:
   scopes:

@@ -1,13 +1,15 @@
-import type { AppConfig } from "./config.js";
 import { requireEnv } from "./config.js";
 
 const NOTION_VERSION = "2026-03-11";
 const NOTION_API_BASE = "https://api.notion.com";
 
 type JsonBody = Record<string, unknown> | unknown[];
+type NotionApiConfig = {
+  notionApiKey?: string;
+};
 
 export async function notionJson<T>(
-  config: AppConfig,
+  config: NotionApiConfig,
   path: string,
   method: "GET" | "POST" | "PATCH" | "DELETE",
   body?: JsonBody
@@ -32,7 +34,7 @@ export async function notionJson<T>(
   return payload as T;
 }
 
-export async function notionForm<T>(config: AppConfig, path: string, formData: FormData): Promise<T> {
+export async function notionForm<T>(config: NotionApiConfig, path: string, formData: FormData): Promise<T> {
   requireEnv("notionApiKey", config.notionApiKey);
 
   const response = await fetch(`${NOTION_API_BASE}${path}`, {
@@ -53,7 +55,7 @@ export async function notionForm<T>(config: AppConfig, path: string, formData: F
 }
 
 export async function queryDataSource<T extends { results: unknown[]; has_more?: boolean; next_cursor?: string | null }>(
-  config: AppConfig,
+  config: NotionApiConfig,
   dataSourceId: string,
   body: Record<string, unknown> = {}
 ): Promise<unknown[]> {
@@ -90,11 +92,23 @@ export function propertyPlainText(property: any): string {
   if (property.type === "title") return property.title?.map((item: any) => item.plain_text).join("") ?? "";
   if (property.type === "rich_text") return property.rich_text?.map((item: any) => item.plain_text).join("") ?? "";
   if (property.type === "select") return property.select?.name ?? "";
+  if (property.type === "created_by") return property.created_by?.name ?? "";
+  if (property.type === "formula") {
+    const formula = property.formula;
+    if (formula?.type === "string") return formula.string ?? "";
+    if (formula?.type === "number") return String(formula.number ?? "");
+    if (formula?.type === "boolean") return formula.boolean ? "true" : "false";
+    if (formula?.type === "date") return formula.date?.start ?? "";
+  }
   return "";
 }
 
 export function propertyNumber(property: any): number {
-  return typeof property?.number === "number" ? property.number : 0;
+  if (typeof property?.number === "number") return property.number;
+  if (property?.type === "formula" && typeof property.formula?.number === "number") {
+    return property.formula.number;
+  }
+  return 0;
 }
 
 export function propertyCheckbox(property: any): boolean {

@@ -2,47 +2,54 @@ import cron from "node-cron";
 import { DateTime } from "luxon";
 import type { AppConfig } from "./config.js";
 import { previousMonth } from "./dates.js";
-import type { AmbassadorProgram } from "./ambassadorProgram.js";
+import type { RewardsProgram } from "./ambassadorProgram.js";
+import type { ProgramConfig } from "./types.js";
 
-export function startScheduler(config: AppConfig, program: AmbassadorProgram): void {
+export function startSchedulers(config: AppConfig, programs: RewardsProgram[]): void {
+  for (const program of programs) {
+    startScheduler(config, program.config, program);
+  }
+}
+
+function startScheduler(_config: AppConfig, programConfig: ProgramConfig, program: RewardsProgram): void {
   cron.schedule(
-    `0 ${config.reminderHour} ${config.reminderDay} * *`,
+    `0 ${programConfig.reminderHour} ${programConfig.reminderDay} * *`,
     async () => {
-      const now = DateTime.now().setZone(config.timezone);
-      const monthToReport = previousMonth(config.timezone, now);
-      await program.sendReminderIfDue(monthToReport, `reminder:${monthToReport}`).catch((error) => {
-        console.error("Scheduled reminder failed", error);
+      const now = DateTime.now().setZone(programConfig.timezone);
+      const monthToReport = previousMonth(programConfig.timezone, now);
+      await program.sendReminderIfDue(monthToReport, `${programConfig.key}:reminder:${monthToReport}`).catch((error) => {
+        console.error(`${programConfig.key} scheduled reminder failed`, error);
       });
     },
-    { timezone: config.timezone }
+    { timezone: programConfig.timezone }
   );
 
   cron.schedule(
-    `0 ${config.reportHour} ${config.reportDay} * *`,
+    `0 ${programConfig.reportHour} ${programConfig.reportDay} * *`,
     async () => {
-      const now = DateTime.now().setZone(config.timezone);
-      const monthToReport = previousMonth(config.timezone, now);
-      await program.sendReportIfDue(monthToReport, `report:${monthToReport}`).catch((error) => {
-        console.error("Scheduled report failed", error);
+      const now = DateTime.now().setZone(programConfig.timezone);
+      const monthToReport = previousMonth(programConfig.timezone, now);
+      await program.sendReportIfDue(monthToReport, `${programConfig.key}:report:${monthToReport}`).catch((error) => {
+        console.error(`${programConfig.key} scheduled report failed`, error);
       });
     },
-    { timezone: config.timezone }
+    { timezone: programConfig.timezone }
   );
 
-  runDueAutomations(config, program).catch((error) => {
-    console.error("Startup automation reconciliation failed", error);
+  runDueAutomations(programConfig, program).catch((error) => {
+    console.error(`${programConfig.key} startup automation reconciliation failed`, error);
   });
 }
 
-export async function runDueAutomations(config: AppConfig, program: AmbassadorProgram): Promise<void> {
+export async function runDueAutomations(config: ProgramConfig, program: RewardsProgram): Promise<void> {
   const now = DateTime.now().setZone(config.timezone);
   const monthToReport = previousMonth(config.timezone, now);
 
   if (now.day === config.reminderDay && now.hour >= config.reminderHour) {
-    await program.sendReminderIfDue(monthToReport, `reminder:${monthToReport}`);
+    await program.sendReminderIfDue(monthToReport, `${config.key}:reminder:${monthToReport}`);
   }
 
   if (now.day === config.reportDay && now.hour >= config.reportHour) {
-    await program.sendReportIfDue(monthToReport, `report:${monthToReport}`);
+    await program.sendReportIfDue(monthToReport, `${config.key}:report:${monthToReport}`);
   }
 }

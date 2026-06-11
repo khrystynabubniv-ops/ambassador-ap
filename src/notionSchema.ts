@@ -1,13 +1,5 @@
-import type { Activity } from "./types.js";
+import type { Activity, ProgramConfig } from "./types.js";
 import { monthUkrainianName, monthsOfYear } from "./dates.js";
-
-const CATEGORY_OPTIONS = [
-  { name: "Поширення", color: "blue" },
-  { name: "Партнерства", color: "green" },
-  { name: "Виступи", color: "purple" },
-  { name: "Контент", color: "yellow" },
-  { name: "Екскурсії", color: "orange" }
-];
 
 const STATUS_OPTIONS = [
   { name: "Submitted", color: "blue" },
@@ -19,19 +11,6 @@ const AUTOMATION_KIND_OPTIONS = [
   { name: "reminder", color: "blue" },
   { name: "report", color: "green" }
 ];
-
-export const ACTIVITY_SUMMARY_PROPERTIES = [
-  { key: "vacancy_student_chats", property: "Вакансії в чатах" },
-  { key: "events_internships_student_chats", property: "Івенти/стажування в чатах" },
-  { key: "teacher_contact", property: "Контакти викладачів" },
-  { key: "own_university_lecture", property: "Власні лекції" },
-  { key: "guest_lecture_coorganization", property: "Гостьові лекції" },
-  { key: "career_center_channel", property: "Кар'єрні канали" },
-  { key: "telegram_uni_career_hub_post", property: "Пости Uni Career Hub" },
-  { key: "office_tour", property: "Екскурсії офісом" }
-] as const;
-
-export const TRACKER_TITLE = "Ambassador Program Tracker 2026";
 
 export const TRACKER_PROPERTIES = {
   title: "Учасник",
@@ -63,66 +42,83 @@ export const OLD_ACTIVITY_SUMMARY_PROPERTIES = [
   "Office Tours Qty"
 ] as const;
 
-const ACTIVITY_SUMMARY_SCHEMA = Object.fromEntries(
-  ACTIVITY_SUMMARY_PROPERTIES.map(({ property }) => [property, { number: { format: "number" } }])
-);
+export type ActivitySummaryProperty = {
+  key: string;
+  property: string;
+};
 
-export const notionSchemas = {
-  ambassadors: {
-    Name: { title: {} },
-    "Slack Nickname": { rich_text: {} },
-    "Slack User ID": { rich_text: {} },
-    Active: { checkbox: {} },
-    "Created Via": { rich_text: {} }
-  },
-  activityCatalog: {
-    Activity: { title: {} },
-    Key: { rich_text: {} },
-    Category: { select: { options: CATEGORY_OPTIONS } },
-    "Coins per Unit": { number: { format: "number" } },
-    "Requires Quantity": { checkbox: {} },
-    "Requires Proof": { checkbox: {} },
-    Active: { checkbox: {} },
-    Order: { number: { format: "number" } }
-  },
-  submissions: {
-    Submission: { title: {} },
-    "Ambassador Name": { rich_text: {} },
-    "Slack Nickname": { rich_text: {} },
-    "Slack User ID": { rich_text: {} },
-    Month: { date: {} },
-    "Activity Key": { rich_text: {} },
-    Activity: { rich_text: {} },
-    Category: { select: { options: CATEGORY_OPTIONS } },
-    Quantity: { number: { format: "number" } },
-    "Coins per Unit": { number: { format: "number" } },
-    "Base Coins": { number: { format: "number" } },
-    "Proof Files": { files: {} },
-    Status: { select: { options: STATUS_OPTIONS } },
-    Notes: { rich_text: {} },
-    "Submitted At": { date: {} }
-  },
-  monthlySummary: {
-    [TRACKER_PROPERTIES.title]: { title: {} },
-    [TRACKER_PROPERTIES.slack]: { rich_text: {} },
-    [TRACKER_PROPERTIES.month]: { select: { options: TRACKER_MONTH_OPTIONS } },
-    ...ACTIVITY_SUMMARY_SCHEMA,
-    [TRACKER_PROPERTIES.baseCoins]: { number: { format: "number" } },
-    [TRACKER_PROPERTIES.bonusCoins]: { number: { format: "number" } },
-    [TRACKER_PROPERTIES.totalCoins]: { number: { format: "number" } },
-    [TRACKER_PROPERTIES.proofs]: { files: {} },
-    [TRACKER_PROPERTIES.updatedAt]: { date: {} }
-  },
-  automationLog: {
-    Event: { title: {} },
-    Kind: { select: { options: AUTOMATION_KIND_OPTIONS } },
-    Key: { rich_text: {} },
-    Month: { date: {} },
-    "Sent At": { date: {} },
-    Channel: { rich_text: {} },
-    Payload: { rich_text: {} }
-  }
-} satisfies Record<string, Record<string, unknown>>;
+export function activitySummaryProperties(activities: Activity[]): ActivitySummaryProperty[] {
+  return activities.map((activity) => ({
+    key: activity.key,
+    property: activity.summaryProperty ?? compactPropertyName(activity.title)
+  }));
+}
+
+export function buildNotionSchemas(program: ProgramConfig) {
+  const categoryOptions = categoryOptionsForActivities(program.activities);
+  const activitySummarySchema = Object.fromEntries(
+    activitySummaryProperties(program.activities).map(({ property }) => [property, { number: { format: "number" } }])
+  );
+
+  return {
+    participants: {
+      Name: { title: {} },
+      "Slack Nickname": { rich_text: {} },
+      "Slack User ID": { rich_text: {} },
+      Active: { checkbox: {} },
+      "Created Via": { rich_text: {} }
+    },
+    activityCatalog: {
+      Activity: { title: {} },
+      Key: { rich_text: {} },
+      Category: { select: { options: categoryOptions } },
+      "Summary Property": { rich_text: {} },
+      "Coins per Unit": { number: { format: "number" } },
+      "Requires Quantity": { checkbox: {} },
+      "Requires Proof": { checkbox: {} },
+      Active: { checkbox: {} },
+      Order: { number: { format: "number" } }
+    },
+    submissions: {
+      Submission: { title: {} },
+      "Participant Name": { rich_text: {} },
+      "Ambassador Name": { rich_text: {} },
+      "Slack Nickname": { rich_text: {} },
+      "Slack User ID": { rich_text: {} },
+      Month: { date: {} },
+      "Activity Key": { rich_text: {} },
+      Activity: { rich_text: {} },
+      Category: { select: { options: categoryOptions } },
+      Quantity: { number: { format: "number" } },
+      "Coins per Unit": { number: { format: "number" } },
+      "Base Coins": { number: { format: "number" } },
+      "Proof Files": { files: {} },
+      Status: { select: { options: STATUS_OPTIONS } },
+      Notes: { rich_text: {} },
+      "Submitted At": { date: {} }
+    },
+    monthlySummary: {
+      [TRACKER_PROPERTIES.title]: { title: {} },
+      [TRACKER_PROPERTIES.slack]: { rich_text: {} },
+      [TRACKER_PROPERTIES.month]: { select: { options: TRACKER_MONTH_OPTIONS } },
+      ...activitySummarySchema,
+      [TRACKER_PROPERTIES.baseCoins]: { number: { format: "number" } },
+      [TRACKER_PROPERTIES.bonusCoins]: { number: { format: "number" } },
+      [TRACKER_PROPERTIES.totalCoins]: { number: { format: "number" } },
+      [TRACKER_PROPERTIES.proofs]: { files: {} },
+      [TRACKER_PROPERTIES.updatedAt]: { date: {} }
+    },
+    automationLog: {
+      Event: { title: {} },
+      Kind: { select: { options: AUTOMATION_KIND_OPTIONS } },
+      Key: { rich_text: {} },
+      Month: { date: {} },
+      "Sent At": { date: {} },
+      Channel: { rich_text: {} },
+      Payload: { rich_text: {} }
+    }
+  } satisfies Record<string, Record<string, unknown>>;
+}
 
 export function activityPageProperties(activity: Activity) {
   return {
@@ -134,6 +130,9 @@ export function activityPageProperties(activity: Activity) {
     },
     Category: {
       select: { name: activity.category }
+    },
+    "Summary Property": {
+      rich_text: [{ type: "text", text: { content: activity.summaryProperty ?? compactPropertyName(activity.title) } }]
     },
     "Coins per Unit": {
       number: activity.coinsPerUnit
@@ -151,4 +150,17 @@ export function activityPageProperties(activity: Activity) {
       number: activity.order ?? 999
     }
   };
+}
+
+function categoryOptionsForActivities(activities: Activity[]) {
+  const categories = [...new Set(activities.map((activity) => activity.category).filter(Boolean))];
+  const colors = ["blue", "green", "purple", "yellow", "orange", "pink", "gray", "brown", "red"] as const;
+  return categories.map((name, index) => ({
+    name,
+    color: colors[index % colors.length]
+  }));
+}
+
+function compactPropertyName(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, 48);
 }

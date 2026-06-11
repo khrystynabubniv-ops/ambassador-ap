@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { AmbassadorProgram } from "../src/ambassadorProgram.js";
 import { DEFAULT_ACTIVITIES } from "../src/activities.js";
-import { calculateActivityCoins, calculateMonthlySummary, normalizeQuantity } from "../src/coins.js";
+import { calculateActivityCoins, calculateEgcCoins, calculateMonthlySummary, normalizeQuantity } from "../src/coins.js";
+import { loadConfig } from "../src/config.js";
 import { monthlyReminderText } from "../src/slackService.js";
 import { displaySlackNickname, normalizeSlackNickname } from "../src/text.js";
 
 describe("coin calculation", () => {
+  const ambassadorConfig = loadConfig().programs[0];
+
   it("requires proof only for screenshot-marked activity types", () => {
     const proofRequiredKeys = DEFAULT_ACTIVITIES
       .filter((activity) => activity.requiresProof)
@@ -66,21 +69,39 @@ describe("coin calculation", () => {
 
   it("formats the monthly reminder message", () => {
     const message = monthlyReminderText(
+      ambassadorConfig,
       "2026-04",
-      "https://ambassador-ap-production.up.railway.app/?month=2026-04",
-      "https://www.notion.so/Ambassador-program-for-students-2cbce9899cb78073b0b7f3e9df2bf82b?source=copy_link"
+      "https://ambassador-ap-production.up.railway.app/ambassador?month=2026-04"
     );
 
     expect(message).toContain("Привіт, амбасадори!");
-    expect(message).toContain("✨");
     expect(message).toContain("чекліст за *квітень 2026*");
-    expect(message).toContain("<https://ambassador-ap-production.up.railway.app/?month=2026-04|Заповнити чекліст>");
+    expect(message).toContain("<https://ambassador-ap-production.up.railway.app/ambassador?month=2026-04|Заповнити чекліст>");
     expect(message).toContain("юнікоіни");
+  });
+
+  it("calculates EGC reports with story series as a separate input", () => {
+    const summary = calculateEgcCoins({
+      participantName: "Diana Bondarenko",
+      slackNickname: "Diana Bondarenko",
+      month: "2026-05",
+      instagramStories: 10,
+      instagramVacancyStories: 2,
+      instagramReels: 1,
+      instagramPosts: 1,
+      linkedinPosts: 1,
+      linkedinVacancyPosts: 0,
+      instagramStorySeries: 1,
+      storySeriesDays: ["2026-05-12"]
+    });
+
+    expect(summary.totalCoins).toBe(56);
+    expect(summary.breakdown).toContain("Дні з серією сторіз в Instagram: 1 (3 coins)");
   });
 
   it("keeps monthly reports focused on participants with activity", async () => {
     const program = new AmbassadorProgram(
-      {} as any,
+      ambassadorConfig,
       {
         listMonthlySummaries: async () => [
           { slackNickname: "anna", hasActivity: true, totalCoins: 30, reportLine: "@anna - 30 coins" },

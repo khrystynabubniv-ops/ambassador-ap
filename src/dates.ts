@@ -8,6 +8,14 @@ export function monthStart(month: string): string {
   return parsed.startOf("month").toISODate()!;
 }
 
+export function monthEnd(month: string): string {
+  const parsed = DateTime.fromFormat(month, "yyyy-MM", { zone: "UTC" });
+  if (!parsed.isValid) {
+    throw new Error("Month must use YYYY-MM format.");
+  }
+  return parsed.endOf("month").toISODate()!;
+}
+
 export function previousMonth(zone: string, now = DateTime.now().setZone(zone)): string {
   return now.minus({ months: 1 }).toFormat("yyyy-MM");
 }

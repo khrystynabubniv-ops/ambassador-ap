@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ambassador Activity Report</title>
+    <title>Program Activity Report</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&display=swap" rel="stylesheet" />
@@ -310,6 +310,64 @@
         display: grid;
         grid-template-columns: minmax(126px, 0.42fr) minmax(0, 0.58fr);
         gap: 14px;
+      }
+
+      .egc-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .egc-wide {
+        grid-column: 1 / -1;
+      }
+
+      .story-calendar {
+        display: grid;
+        gap: 8px;
+      }
+
+      .story-calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .story-calendar-weekday {
+        color: var(--helper);
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 1.2;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      .story-day {
+        aspect-ratio: 1;
+        min-width: 0;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #ffffff;
+        color: var(--ink);
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      .story-day:hover {
+        border-color: var(--brand-black);
+        background: var(--soft);
+      }
+
+      .story-day.is-selected {
+        border-color: var(--brand-black);
+        background: var(--brand-yellow);
+        color: var(--brand-black);
+      }
+
+      .story-day-spacer {
+        aspect-ratio: 1;
       }
 
       .drop-zone {
@@ -642,7 +700,8 @@
         }
 
         .field-grid,
-        .activity-grid {
+        .activity-grid,
+        .egc-grid {
           grid-template-columns: 1fr;
         }
 
@@ -654,20 +713,20 @@
   </head>
   <body>
     <main class="page-shell">
-      <section class="form-panel" aria-label="Ambassador activity report">
+      <section class="form-panel" aria-label="Program activity report">
         <header class="page-header">
-          <div class="brand-mark" aria-hidden="true">U</div>
+          <div class="brand-mark" id="brand-mark" aria-hidden="true">U</div>
           <div>
-            <p class="breadcrumb">Student Ambassador Program</p>
-            <h1>Ambassador activity report</h1>
-            <p class="deadline-note">Заповни до 5-го числа наступного місяця</p>
+            <p class="breadcrumb" id="form-eyebrow">Student Ambassador Program</p>
+            <h1 id="form-title">Ambassador activity report</h1>
+            <p class="deadline-note" id="deadline-note">Заповни до 5-го числа наступного місяця</p>
           </div>
         </header>
 
         <form id="activity-form" novalidate>
           <div class="field-grid single">
             <label class="field">
-              <span class="field-label">Ім'я у Slack</span>
+              <span class="field-label" id="participant-label">Ім'я у Slack</span>
               <input
                 name="slackNickname"
                 autocomplete="name"
@@ -689,7 +748,7 @@
 
           <div class="section-separator" aria-hidden="true"></div>
           <div class="section-heading">
-            <h2>Активності</h2>
+            <h2 id="section-title">Активності</h2>
           </div>
 
           <div id="activities" class="activities"></div>
@@ -697,11 +756,11 @@
           <div class="actions">
             <button class="add-button" type="button" id="add-activity">
               <i class="ti ti-plus" aria-hidden="true"></i>
-              <span>Додати активність</span>
+              <span id="add-activity-label">Додати активність</span>
             </button>
             <button class="primary-button" type="submit" id="submit-button" disabled>
               <i class="ti ti-send" aria-hidden="true"></i>
-              <span>Відправити форму</span>
+              <span id="submit-label">Відправити форму</span>
             </button>
           </div>
         </form>
@@ -710,8 +769,8 @@
       <aside class="coins-card" aria-label="Coins summary">
         <div class="coins-hero">
           <div class="coins-topline">
-            <span class="coins-label">Coins</span>
-            <p class="coins-note">
+            <span class="coins-label" id="summary-label">Coins</span>
+            <p class="coins-note" id="summary-note">
               Це орієнтовна кількість коінів. Точна кількість та видача відбуваються після перевірки EB-командою.
             </p>
           </div>
@@ -719,15 +778,15 @@
         </div>
         <div class="summary-lines">
           <div class="summary-row">
-            <span>Активностей</span>
+            <span id="activity-count-label">Активностей</span>
             <strong id="activity-count">0 шт.</strong>
           </div>
           <div class="summary-row">
-            <span>Бонус</span>
+            <span id="bonus-label">Бонус</span>
             <strong id="bonus">0 coins</strong>
           </div>
           <div class="summary-row">
-            <span>Total у формі</span>
+            <span id="total-label">Total у формі</span>
             <strong id="total">0 coins</strong>
           </div>
         </div>
@@ -805,23 +864,51 @@
       ];
 
       const state = {
+        programSlug: getProgramSlug(),
+        apiBase: getApiBase(),
+        mode: "activity",
         activities: [],
         bonusThreshold: 3,
         bonusCoins: 10,
+        egcCoinRates: {
+          instagramStory: 1,
+          instagramVacancyStory: 3,
+          instagramReel: 13,
+          instagramPost: 12,
+          linkedinPost: 12,
+          linkedinVacancyPost: 12,
+          instagramStorySeries: 3
+        },
+        egcStorySeriesDays: [],
         currentMonth: "",
         submitting: false,
         validationAttempted: false
       };
 
       const form = document.querySelector("#activity-form");
+      const brandMark = document.querySelector("#brand-mark");
+      const formEyebrow = document.querySelector("#form-eyebrow");
+      const formTitle = document.querySelector("#form-title");
+      const deadlineNote = document.querySelector("#deadline-note");
+      const participantLabel = document.querySelector("#participant-label");
+      const participantInput = form.elements.slackNickname;
+      const participantHelp = document.querySelector("#slack-name-hint");
+      const addActivityLabel = document.querySelector("#add-activity-label");
+      const submitLabel = document.querySelector("#submit-label");
+      const summaryLabel = document.querySelector("#summary-label");
+      const summaryNote = document.querySelector("#summary-note");
+      const sectionTitle = document.querySelector("#section-title");
       const activityContainer = document.querySelector("#activities");
       const template = document.querySelector("#activity-template");
       const monthSelect = document.querySelector("#month");
       const addButton = document.querySelector("#add-activity");
       const submitButton = document.querySelector("#submit-button");
       const subtotalEl = document.querySelector("#subtotal");
+      const activityCountLabel = document.querySelector("#activity-count-label");
       const activityCountEl = document.querySelector("#activity-count");
+      const bonusLabel = document.querySelector("#bonus-label");
       const bonusEl = document.querySelector("#bonus");
+      const totalLabel = document.querySelector("#total-label");
       const totalEl = document.querySelector("#total");
       const resultEl = document.querySelector("#result");
 
@@ -832,28 +919,68 @@
 
       async function init() {
         const params = new URLSearchParams(window.location.search);
-        const response = await fetch("/api/form-config");
+        const response = await fetch(`${state.apiBase}/form-config`);
         if (!response.ok) {
           throw new Error("Could not load form configuration.");
         }
 
         const config = await response.json();
+        state.mode = config.program?.mode || "activity";
         state.activities = Array.isArray(config.activities) ? config.activities : [];
         state.bonusThreshold = Number(config.bonusThreshold || state.bonusThreshold);
         state.bonusCoins = Number(config.bonusCoins || state.bonusCoins);
+        state.egcCoinRates = { ...state.egcCoinRates, ...(config.egcCoinRates || {}) };
         state.currentMonth = config.currentMonth || "";
+        applyProgramContent(config.program);
 
         populateMonths(config.months || [], params.get("month") || state.currentMonth);
-        addActivityRow();
+        if (state.mode === "egc-report") {
+          setupEgcReportForm();
+        } else {
+          addActivityRow();
+          addButton.addEventListener("click", addActivityRow);
+        }
 
-        addButton.addEventListener("click", addActivityRow);
         form.addEventListener("submit", submitForm);
         form.addEventListener("input", () => {
           sanitizeSlackInput();
           updateSubmitState();
         });
         form.addEventListener("change", updateSubmitState);
+        monthSelect.addEventListener("change", () => {
+          if (state.mode === "egc-report") {
+            state.egcStorySeriesDays = [];
+            renderStoryCalendar();
+            updateSummary();
+          }
+        });
         updateSummary();
+      }
+
+      function getProgramSlug() {
+        const slug = window.location.pathname.split("/").filter(Boolean)[0];
+        return slug === "egc" ? "egc" : "ambassador";
+      }
+
+      function getApiBase() {
+        return `/api/programs/${getProgramSlug()}`;
+      }
+
+      function applyProgramContent(program) {
+        const content = program?.content;
+        if (!content) return;
+        document.title = `${program.displayName || "Program"} Activity Report`;
+        brandMark.textContent = content.brandMark || brandMark.textContent;
+        formEyebrow.textContent = content.formEyebrow || formEyebrow.textContent;
+        formTitle.textContent = content.formTitle || formTitle.textContent;
+        deadlineNote.textContent = content.deadlineNote || deadlineNote.textContent;
+        participantLabel.textContent = content.participantLabel || participantLabel.textContent;
+        participantInput.placeholder = content.participantPlaceholder || participantInput.placeholder;
+        participantHelp.textContent = content.participantHelp || participantHelp.textContent;
+        addActivityLabel.textContent = content.addActivityLabel || addActivityLabel.textContent;
+        submitLabel.textContent = content.submitLabel || submitLabel.textContent;
+        summaryLabel.textContent = content.summaryLabel || summaryLabel.textContent;
+        summaryNote.textContent = content.summaryNote || summaryNote.textContent;
       }
 
       function populateMonths(months, selectedMonth) {
@@ -867,6 +994,167 @@
         if (selectedMonth && months.includes(selectedMonth)) {
           monthSelect.value = selectedMonth;
         }
+      }
+
+      function setupEgcReportForm() {
+        sectionTitle.textContent = "EGC звіт";
+        addButton.hidden = true;
+        activityCountLabel.textContent = "Полів з контентом";
+        bonusLabel.textContent = "Дні 3+ сторіз";
+        totalLabel.textContent = "До видачі";
+        activityContainer.replaceChildren(buildEgcReportFields());
+        state.egcStorySeriesDays = [];
+        renderStoryCalendar();
+
+        const report = activityContainer.querySelector(".egc-report");
+        report.querySelectorAll(".egc-number").forEach((input) => {
+          input.addEventListener("input", (event) => {
+            sanitizeNonnegativeIntegerInput(event.currentTarget);
+            updateSummary();
+          });
+        });
+        report.querySelectorAll("textarea").forEach((input) => {
+          input.addEventListener("input", updateSubmitState);
+        });
+
+        const proofInput = report.querySelector(".proof-input");
+        const dropZone = report.querySelector(".drop-zone");
+        proofInput.addEventListener("change", () => {
+          renderEgcFileList(report);
+          updateSubmitState();
+        });
+        dropZone.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            proofInput.click();
+          }
+        });
+        dropZone.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          dropZone.classList.add("is-dragging");
+        });
+        dropZone.addEventListener("dragleave", () => dropZone.classList.remove("is-dragging"));
+        dropZone.addEventListener("drop", (event) => {
+          event.preventDefault();
+          dropZone.classList.remove("is-dragging");
+          const files = Array.from(event.dataTransfer?.files || []);
+          if (!files.length) return;
+          setInputFiles(proofInput, [...Array.from(proofInput.files), ...files]);
+        });
+
+        updateSummary();
+      }
+
+      function buildEgcReportFields() {
+        const section = document.createElement("section");
+        section.className = "activity-card egc-report";
+        section.innerHTML = `
+          <div class="egc-grid">
+            <label class="field">
+              <span class="field-label">К-ть сторіз зі згадкою Universe в Instagram</span>
+              <input class="egc-number" name="instagramStories" type="text" inputmode="numeric" pattern="[0-9]*" value="0" required />
+              <span class="helper">Окремі сторіз, які не входять у вибрані нижче дні з серіями. Якщо в один день було 3+ сторіз - відміть цей день у календарі.</span>
+            </label>
+            <label class="field">
+              <span class="field-label">К-ть сторіз з вакансією в Instagram</span>
+              <input class="egc-number" name="instagramVacancyStories" type="text" inputmode="numeric" pattern="[0-9]*" value="0" required />
+              <span class="helper">Сторіз, де є згадка або посилання на вакансію.</span>
+            </label>
+            <label class="field">
+              <span class="field-label">К-ть рілз в Instagram</span>
+              <input class="egc-number" name="instagramReels" type="text" inputmode="numeric" pattern="[0-9]*" value="0" required />
+              <span class="helper">Можеш додати ТікТок'и сюди.</span>
+            </label>
+            <label class="field">
+              <span class="field-label">К-ть постів в Instagram</span>
+              <input class="egc-number" name="instagramPosts" type="text" inputmode="numeric" pattern="[0-9]*" value="0" required />
+            </label>
+            <label class="field">
+              <span class="field-label">К-ть постів в Лінкедін</span>
+              <input class="egc-number" name="linkedinPosts" type="text" inputmode="numeric" pattern="[0-9]*" value="0" required />
+              <span class="helper">Пости про Universe/роботу без згадки наших вакансій.</span>
+            </label>
+            <label class="field">
+              <span class="field-label">К-ть постів з вакансією в Лінкедін</span>
+              <input class="egc-number" name="linkedinVacancyPosts" type="text" inputmode="numeric" pattern="[0-9]*" value="0" required />
+              <span class="helper">Пости, де є згадка, опис або посилання на нашу вакансію. Не дублюй їх у полі вище.</span>
+            </label>
+            <div class="field egc-wide story-calendar">
+              <span class="field-label">Дні, коли було 3+ сторіз</span>
+              <div class="story-calendar-grid" data-calendar-weekdays></div>
+              <div class="story-calendar-grid" data-story-calendar></div>
+              <input name="instagramStorySeries" type="hidden" value="0" />
+              <span class="helper">Клікни дні місяця, у які було 3 або більше сторіз. За кожен такий день рахується максимум 3 коіни.</span>
+            </div>
+            <div class="field egc-wide">
+              <span class="field-label">Додай скріншоти постів і рілз</span>
+              <label class="drop-zone" tabindex="0">
+                <input class="proof-input" name="egcProofs" type="file" multiple accept="image/*,.pdf" />
+                <i class="ti ti-upload" aria-hidden="true"></i>
+                <span class="drop-zone-title">Прикріпи файли</span>
+                <span class="helper">Сторіз можеш не додавати. До 10 файлів у формі.</span>
+              </label>
+              <div class="file-list" hidden></div>
+            </div>
+          </div>
+        `;
+        return section;
+      }
+
+      function renderStoryCalendar() {
+        const weekdays = activityContainer.querySelector("[data-calendar-weekdays]");
+        const calendar = activityContainer.querySelector("[data-story-calendar]");
+        const seriesInput = form.elements.instagramStorySeries;
+        if (!weekdays || !calendar || !seriesInput) return;
+
+        weekdays.replaceChildren();
+        ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"].forEach((label) => {
+          const item = document.createElement("span");
+          item.className = "story-calendar-weekday";
+          item.textContent = label;
+          weekdays.append(item);
+        });
+
+        calendar.replaceChildren();
+        const match = /^(\d{4})-(\d{2})$/.exec(monthSelect.value || state.currentMonth);
+        if (!match) return;
+
+        const year = Number(match[1]);
+        const monthIndex = Number(match[2]) - 1;
+        const firstDay = new Date(year, monthIndex, 1);
+        const dayCount = new Date(year, monthIndex + 1, 0).getDate();
+        const leadingEmptyDays = (firstDay.getDay() + 6) % 7;
+
+        for (let index = 0; index < leadingEmptyDays; index += 1) {
+          const spacer = document.createElement("span");
+          spacer.className = "story-day-spacer";
+          calendar.append(spacer);
+        }
+
+        for (let day = 1; day <= dayCount; day += 1) {
+          const isoDate = `${match[1]}-${match[2]}-${String(day).padStart(2, "0")}`;
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "story-day";
+          button.textContent = String(day);
+          button.dataset.date = isoDate;
+          button.classList.toggle("is-selected", state.egcStorySeriesDays.includes(isoDate));
+          button.setAttribute("aria-pressed", state.egcStorySeriesDays.includes(isoDate) ? "true" : "false");
+          button.addEventListener("click", () => {
+            toggleStorySeriesDay(isoDate);
+          });
+          calendar.append(button);
+        }
+
+        seriesInput.value = String(state.egcStorySeriesDays.length);
+      }
+
+      function toggleStorySeriesDay(isoDate) {
+        state.egcStorySeriesDays = state.egcStorySeriesDays.includes(isoDate)
+          ? state.egcStorySeriesDays.filter((day) => day !== isoDate)
+          : [...state.egcStorySeriesDays, isoDate].sort();
+        renderStoryCalendar();
+        updateSummary();
       }
 
       function formatMonth(value) {
@@ -995,6 +1283,13 @@
         }
       }
 
+      function sanitizeNonnegativeIntegerInput(input) {
+        const sanitizedValue = input.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+        if (input.value !== sanitizedValue) {
+          input.value = sanitizedValue;
+        }
+      }
+
       function sanitizeSlackInput() {
         const input = form.elements.slackNickname;
         const sanitizedValue = input.value.replace(/^@+/, "");
@@ -1020,6 +1315,11 @@
       }
 
       function updateSummary() {
+        if (state.mode === "egc-report") {
+          updateEgcSummary();
+          return;
+        }
+
         let subtotal = 0;
         const distinctActivities = new Set();
 
@@ -1043,11 +1343,60 @@
         updateSubmitState();
       }
 
+      function updateEgcSummary() {
+        const counts = egcCountsFromForm();
+        const summary = calculateEgcSummary(counts);
+        subtotalEl.textContent = String(summary.total);
+        activityCountEl.textContent = `${summary.nonZeroCount} пол.`;
+        bonusEl.textContent = `${counts.instagramStorySeries} дн.`;
+        totalEl.textContent = `${summary.total} coins`;
+        updateSubmitState();
+      }
+
+      function egcCountsFromForm() {
+        return {
+          instagramStories: numberFieldValue("instagramStories"),
+          instagramVacancyStories: numberFieldValue("instagramVacancyStories"),
+          instagramReels: numberFieldValue("instagramReels"),
+          instagramPosts: numberFieldValue("instagramPosts"),
+          linkedinPosts: numberFieldValue("linkedinPosts"),
+          linkedinVacancyPosts: numberFieldValue("linkedinVacancyPosts"),
+          instagramStorySeries: state.egcStorySeriesDays.length
+        };
+      }
+
+      function numberFieldValue(name) {
+        const field = form.elements[name];
+        const parsed = Number(field?.value || 0);
+        return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : 0;
+      }
+
+      function calculateEgcSummary(counts) {
+        const rates = state.egcCoinRates;
+        const lineItems = [
+          counts.instagramStories * rates.instagramStory,
+          counts.instagramVacancyStories * rates.instagramVacancyStory,
+          counts.instagramReels * rates.instagramReel,
+          counts.instagramPosts * rates.instagramPost,
+          counts.linkedinPosts * rates.linkedinPost,
+          counts.linkedinVacancyPosts * rates.linkedinVacancyPost,
+          counts.instagramStorySeries * rates.instagramStorySeries
+        ];
+        return {
+          total: lineItems.reduce((total, value) => total + value, 0),
+          nonZeroCount: Object.values(counts).filter((value) => value > 0).length
+        };
+      }
+
       function updateSubmitState() {
         submitButton.disabled = state.submitting || !isFormComplete();
       }
 
       function isFormComplete() {
+        if (state.mode === "egc-report") {
+          return isEgcFormComplete();
+        }
+
         const slackNickname = normalizeSlackName(form.elements.slackNickname.value);
         const month = form.elements.month.value;
         const rows = Array.from(activityContainer.querySelectorAll(".activity-card"));
@@ -1058,6 +1407,27 @@
           rows.length > 0 &&
           rows.every(isActivityComplete)
         );
+      }
+
+      function isEgcFormComplete() {
+        const slackNickname = normalizeSlackName(form.elements.slackNickname.value);
+        const month = form.elements.month.value;
+        const requiredFields = [
+          "instagramStories",
+          "instagramVacancyStories",
+          "instagramReels",
+          "instagramPosts",
+          "linkedinPosts",
+          "linkedinVacancyPosts",
+          "instagramStorySeries"
+        ];
+        const allNumbersFilled = requiredFields.every((name) => {
+          const field = form.elements[name];
+          return field && field.value !== "" && Number(field.value) >= 0;
+        });
+        const hasContent = Object.values(egcCountsFromForm()).some((value) => value > 0);
+
+        return slackNickname.length >= 2 && Boolean(month) && allNumbersFilled && hasContent;
       }
 
       function isActivityComplete(row) {
@@ -1110,6 +1480,40 @@
         updateSubmitState();
       }
 
+      function renderEgcFileList(report) {
+        const input = report.querySelector(".proof-input");
+        const dropZone = report.querySelector(".drop-zone");
+        const fileList = report.querySelector(".file-list");
+        const files = Array.from(input.files);
+
+        fileList.replaceChildren();
+        fileList.hidden = files.length === 0;
+        dropZone.classList.toggle("has-files", files.length > 0);
+
+        files.forEach((file, index) => {
+          const item = document.createElement("div");
+          item.className = "file-item";
+
+          const fileName = document.createElement("span");
+          fileName.className = "file-name";
+          fileName.textContent = file.name;
+
+          const removeButton = document.createElement("button");
+          removeButton.className = "file-remove";
+          removeButton.type = "button";
+          removeButton.setAttribute("aria-label", `Видалити ${file.name}`);
+          removeButton.textContent = "×";
+          removeButton.addEventListener("click", () => {
+            setInputFiles(input, files.filter((_, fileIndex) => fileIndex !== index));
+          });
+
+          item.append(fileName, removeButton);
+          fileList.append(item);
+        });
+
+        updateSubmitState();
+      }
+
       function setInputFiles(input, files) {
         const dataTransfer = new DataTransfer();
         files.forEach((file) => dataTransfer.items.add(file));
@@ -1125,7 +1529,17 @@
 
         if (!isFormComplete()) {
           form.reportValidity();
-          showResult("Заповни обов'язкові поля та додай підтвердження для кожної активності.", true);
+          showResult(
+            state.mode === "egc-report"
+              ? "Заповни ім'я, місяць і всі числові поля. Має бути хоча б один EGC пункт більше 0."
+              : "Заповни обов'язкові поля та додай підтвердження для кожної активності.",
+            true
+          );
+          return;
+        }
+
+        if (state.mode === "egc-report") {
+          await submitEgcForm();
           return;
         }
 
@@ -1135,6 +1549,7 @@
         try {
           const formData = new FormData();
           const slackName = normalizeSlackName(form.elements.slackNickname.value);
+          formData.set("participantName", slackName);
           formData.set("ambassadorName", slackName);
           formData.set("slackNickname", slackName);
           formData.set("slackUserId", "");
@@ -1156,7 +1571,7 @@
           });
           formData.set("activities", JSON.stringify(activities));
 
-          const response = await fetch("/api/submissions", {
+          const response = await fetch(`${state.apiBase}/submissions`, {
             method: "POST",
             body: formData
           });
@@ -1184,11 +1599,65 @@
         }
       }
 
+      async function submitEgcForm() {
+        state.submitting = true;
+        updateSubmitState();
+
+        try {
+          const formData = new FormData();
+          const slackName = normalizeSlackName(form.elements.slackNickname.value);
+          const counts = egcCountsFromForm();
+          formData.set("participantName", slackName);
+          formData.set("slackNickname", slackName);
+          formData.set("slackUserId", "");
+          formData.set("month", form.elements.month.value);
+          for (const [key, value] of Object.entries(counts)) {
+            formData.set(key, String(value));
+          }
+          formData.set("storySeriesDays", JSON.stringify(state.egcStorySeriesDays));
+
+          const proofInput = activityContainer.querySelector(".egc-report .proof-input");
+          for (const file of proofInput.files) {
+            formData.append("egcProofs", file);
+          }
+
+          const response = await fetch(`${state.apiBase}/submissions`, {
+            method: "POST",
+            body: formData
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.error || "Submission failed.");
+          }
+
+          showResult(
+            [
+              "EGC форму відправлено.",
+              "",
+              payload.summary.reportLine,
+              payload.summary.activityBreakdown || "",
+              `Total coins: ${payload.summary.totalCoins}`
+            ].filter(Boolean).join("\n")
+          );
+          resetForm();
+        } catch (error) {
+          showResult(error.message || "Submission failed.", true);
+        } finally {
+          state.submitting = false;
+          updateSubmitState();
+        }
+      }
+
       function resetForm() {
         form.reset();
         state.validationAttempted = false;
         if (state.currentMonth) {
           monthSelect.value = state.currentMonth;
+        }
+        if (state.mode === "egc-report") {
+          setupEgcReportForm();
+          updateSummary();
+          return;
         }
         activityContainer.replaceChildren();
         addActivityRow();

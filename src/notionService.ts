@@ -1,8 +1,14 @@
-import type { AppConfig } from "./config.js";
-import type { Activity, AutomationKind, MonthlySummary, SubmissionInput, SubmittedActivity } from "./types.js";
-import { DEFAULT_ACTIVITIES } from "./activities.js";
-import { calculateActivityCoins } from "./coins.js";
-import { monthFromUkrainianName, monthStart, monthUkrainianName } from "./dates.js";
+import type {
+  Activity,
+  AutomationKind,
+  EgcReportInput,
+  MonthlySummary,
+  ProgramConfig,
+  SubmissionInput,
+  SubmittedActivity
+} from "./types.js";
+import { calculateActivityCoins, calculateEgcCoins } from "./coins.js";
+import { monthDisplayName, monthEnd, monthFromUkrainianName, monthStart, monthUkrainianName } from "./dates.js";
 import {
   notionForm,
   notionJson,
@@ -15,7 +21,7 @@ import {
   titleText
 } from "./notionClient.js";
 import { displaySlackNickname, normalizeSlackNickname, truncateForNotion } from "./text.js";
-import { ACTIVITY_SUMMARY_PROPERTIES, TRACKER_PROPERTIES } from "./notionSchema.js";
+import { activitySummaryProperties, TRACKER_PROPERTIES } from "./notionSchema.js";
 
 type NotionPage = {
   id: string;
@@ -31,37 +37,125 @@ type NotionDatabase = {
   data_sources?: Array<{ id: string; name?: string }>;
 };
 
+const EGC_PROPERTIES = {
+  title: "Name",
+  period: "За який період ти заповнюєш звіт?",
+  instagramStories: "К-ть сторіз в Instagram",
+  instagramVacancyStories: "К-ть сторіз з вакансією в Instagram",
+  instagramReels: "К-ть рілз в Instagram",
+  instagramPosts: "К-ть постів в Instagram",
+  linkedinPosts: "К-ть постів в Лінкедін",
+  linkedinVacancyPosts: "К-ть постів з вакансією в Лінкедін",
+  proofFiles: "Додай скріншоти постів і рілз",
+  formulaCoins: "К-ть коінів",
+  slack: "Slack",
+  storySeries: "К-ть серій сторіз в Instagram",
+  storySeriesDays: "Дні серій сторіз",
+  coinsToIssue: "Коіни до видачі"
+} as const;
+
 export class NotionService {
   private activityTrackerDataSourceId?: string;
   private activityTrackerSchemaReady = false;
+  private egcReportsSchemaReady = false;
+  private activityCatalogUnavailableLogged = false;
 
-  constructor(private readonly config: AppConfig) {}
+  constructor(private readonly config: ProgramConfig) {}
 
   isConfigured(): boolean {
+    if (this.config.mode === "egc-report") {
+      return Boolean(this.config.notionApiKey && this.config.notionEgcReportsDataSourceId);
+    }
+
     return Boolean(
       this.config.notionApiKey &&
+        this.config.notionParticipantsDataSourceId &&
+        this.config.notionSubmissionsDataSourceId &&
         this.config.notionMonthlySummaryDataSourceId
     );
   }
 
   async listActivities(): Promise<Activity[]> {
-    return DEFAULT_ACTIVITIES;
+    if (this.config.notionApiKey && this.config.notionActivityCatalogDataSourceId) {
+      try {
+        const pages = (await queryDataSource(this.config, this.config.notionActivityCatalogDataSourceId, {
+          sorts: [{ property: "Order", direction: "ascending" }]
+        })) as NotionPage[];
+        const activities = pages.map((page) => this.activityFromPage(page)).filter((activity) => activity.active);
+        if (activities.length) {
+          return activities.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+        }
+      } catch {
+        if (!this.activityCatalogUnavailableLogged) {
+          console.warn(`${this.config.key} Activity Catalog is unavailable; using configured defaults.`);
+          this.activityCatalogUnavailableLogged = true;
+        }
+      }
+    }
+
+    return this.config.activities.filter((activity) => activity.active).sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
   }
 
-  async ensureAmbassador(input: SubmissionInput): Promise<void> {
-    this.requireDataSource("notionAmbassadorsDataSourceId");
+  async createEgcReport(input: EgcReportInput, files: Express.Multer.File[]): Promise<MonthlySummary> {
+    this.requireDataSource("notionEgcReportsDataSourceId");
+    await this.ensureEgcReportsSchema();
+
+    const normalizedInput: EgcReportInput = {
+      ...input,
+      participantName: input.participantName || normalizeSlackNickname(input.slackNickname),
+      slackNickname: normalizeSlackNickname(input.slackNickname)
+    };
+    const proofs = await this.uploadProofFiles(files);
+    const calculated = calculateEgcCoins(normalizedInput, this.config.egcCoinRates);
+    const title = `${normalizedInput.participantName} - ${monthDisplayName(normalizedInput.month)}`;
+
+    const response = await notionJson<NotionPage>(this.config, "/v1/pages", "POST", {
+      parent: { type: "data_source_id", data_source_id: this.config.notionEgcReportsDataSourceId },
+      properties: {
+        [EGC_PROPERTIES.title]: titleText(title),
+        [EGC_PROPERTIES.period]: {
+          date: {
+            start: monthStart(normalizedInput.month),
+            end: monthEnd(normalizedInput.month)
+          }
+        },
+        [EGC_PROPERTIES.instagramStories]: { number: normalizedInput.instagramStories },
+        [EGC_PROPERTIES.instagramVacancyStories]: { number: normalizedInput.instagramVacancyStories },
+        [EGC_PROPERTIES.instagramReels]: { number: normalizedInput.instagramReels },
+        [EGC_PROPERTIES.instagramPosts]: { number: normalizedInput.instagramPosts },
+        [EGC_PROPERTIES.linkedinPosts]: { number: normalizedInput.linkedinPosts },
+        [EGC_PROPERTIES.linkedinVacancyPosts]: { number: normalizedInput.linkedinVacancyPosts },
+        [EGC_PROPERTIES.proofFiles]: {
+          files: proofs.map((proof) => ({
+            name: proof.name,
+            type: "file_upload",
+            file_upload: { id: proof.id }
+          }))
+        },
+        [EGC_PROPERTIES.slack]: richText(normalizedInput.slackNickname),
+        [EGC_PROPERTIES.storySeries]: { number: normalizedInput.instagramStorySeries },
+        [EGC_PROPERTIES.storySeriesDays]: richText(normalizedInput.storySeriesDays.join(", ")),
+        [EGC_PROPERTIES.coinsToIssue]: { number: calculated.totalCoins }
+      }
+    });
+
+    return this.egcSummaryFromPage(response, normalizedInput.month, normalizedInput, calculated.totalCoins);
+  }
+
+  async ensureParticipant(input: SubmissionInput): Promise<void> {
+    this.requireDataSource("notionParticipantsDataSourceId");
     const nickname = normalizeSlackNickname(input.slackNickname);
-    const existing = await this.findFirst(this.config.notionAmbassadorsDataSourceId!, {
+    const existing = await this.findFirst(this.config.notionParticipantsDataSourceId!, {
       property: "Slack Nickname",
       rich_text: { equals: nickname }
     });
 
     const properties = {
-      Name: titleText(input.ambassadorName),
+      Name: titleText(input.participantName),
       "Slack Nickname": richText(nickname),
       "Slack User ID": richText(input.slackUserId ?? ""),
       Active: { checkbox: true },
-      "Created Via": richText("ambassador-form")
+      "Created Via": richText(this.config.createdVia)
     };
 
     if (existing) {
@@ -70,7 +164,7 @@ export class NotionService {
     }
 
     await notionJson(this.config, "/v1/pages", "POST", {
-      parent: { type: "data_source_id", data_source_id: this.config.notionAmbassadorsDataSourceId },
+      parent: { type: "data_source_id", data_source_id: this.config.notionParticipantsDataSourceId },
       properties
     });
   }
@@ -90,7 +184,7 @@ export class NotionService {
       parent: { type: "data_source_id", data_source_id: this.config.notionSubmissionsDataSourceId },
       properties: {
         Submission: titleText(submissionTitle),
-        "Ambassador Name": richText(input.ambassadorName),
+        "Ambassador Name": richText(input.participantName),
         "Slack Nickname": richText(nickname),
         "Slack User ID": richText(input.slackUserId ?? ""),
         Month: { date: { start: monthStart(input.month) } },
@@ -153,16 +247,17 @@ export class NotionService {
   async getMonthlySummary(month: string, slackNickname: string): Promise<MonthlySummary | undefined> {
     this.requireDataSource("notionMonthlySummaryDataSourceId");
     const existing = await this.findSummaryPage(month, slackNickname);
-    return existing ? this.summaryFromPage(existing, month) : undefined;
+    return existing ? this.summaryFromPage(existing, month, await this.listActivities()) : undefined;
   }
 
   async upsertMonthlySummary(summary: MonthlySummary, proofFiles: Express.Multer.File[] = []): Promise<void> {
     this.requireDataSource("notionMonthlySummaryDataSourceId");
-    const existing = await this.findSummaryPage(summary.month, summary.slackNickname, summary.ambassadorName);
+    const existing = await this.findSummaryPage(summary.month, summary.slackNickname, summary.participantName);
     const proofs = await this.uploadProofFiles(proofFiles);
+    const activities = await this.listActivities();
 
     const properties = {
-      [TRACKER_PROPERTIES.title]: titleText(summary.ambassadorName || displaySlackNickname(summary.slackNickname)),
+      [TRACKER_PROPERTIES.title]: titleText(summary.participantName || displaySlackNickname(summary.slackNickname)),
       [TRACKER_PROPERTIES.slack]: richText(normalizeSlackNickname(summary.slackNickname)),
       [TRACKER_PROPERTIES.month]: { select: { name: monthUkrainianName(summary.month) } },
       ...(proofs.length
@@ -177,7 +272,7 @@ export class NotionService {
           }
         : {}),
       ...Object.fromEntries(
-        ACTIVITY_SUMMARY_PROPERTIES.map(({ key, property }) => [
+        activitySummaryProperties(activities).map(({ key, property }) => [
           property,
           { number: summary.activityQuantities[key] ?? 0 }
         ])
@@ -206,7 +301,7 @@ export class NotionService {
     const existing = await this.findSummaryPage(
       summary.month,
       summary.slackNickname,
-      summary.ambassadorName,
+      summary.participantName,
       dataSourceId
     );
     const properties = {
@@ -221,7 +316,7 @@ export class NotionService {
     await notionJson(this.config, "/v1/pages", "POST", {
       parent: { type: "data_source_id", data_source_id: dataSourceId },
       properties: {
-        [TRACKER_PROPERTIES.title]: titleText(summary.ambassadorName || displaySlackNickname(summary.slackNickname)),
+        [TRACKER_PROPERTIES.title]: titleText(summary.participantName || displaySlackNickname(summary.slackNickname)),
         [TRACKER_PROPERTIES.slack]: richText(normalizeSlackNickname(summary.slackNickname)),
         [TRACKER_PROPERTIES.month]: { select: { name: monthUkrainianName(summary.month) } },
         ...properties
@@ -230,16 +325,36 @@ export class NotionService {
   }
 
   async listMonthlySummaries(month: string): Promise<MonthlySummary[]> {
+    if (this.config.mode === "egc-report") {
+      return this.listEgcMonthlySummaries(month);
+    }
+
     this.requireDataSource("notionMonthlySummaryDataSourceId");
+    const activities = await this.listActivities();
     const pages = (await queryDataSource(this.config, this.config.notionMonthlySummaryDataSourceId!, {
       filter: { property: TRACKER_PROPERTIES.month, select: { equals: monthUkrainianName(month) } },
       sorts: [{ property: TRACKER_PROPERTIES.totalCoins, direction: "descending" }]
     })) as NotionPage[];
 
     return pages.map((page) => ({
-      ...this.summaryFromPage(page, month),
+      ...this.summaryFromPage(page, month, activities),
       month
     }));
+  }
+
+  async listEgcMonthlySummaries(month: string): Promise<MonthlySummary[]> {
+    this.requireDataSource("notionEgcReportsDataSourceId");
+    const pages = (await queryDataSource(this.config, this.config.notionEgcReportsDataSourceId!, {
+      filter: {
+        and: [
+          { property: EGC_PROPERTIES.period, date: { on_or_after: monthStart(month) } },
+          { property: EGC_PROPERTIES.period, date: { on_or_before: monthEnd(month) } }
+        ]
+      },
+      sorts: [{ property: EGC_PROPERTIES.formulaCoins, direction: "descending" }]
+    })) as NotionPage[];
+
+    return pages.map((page) => this.egcSummaryFromPage(page, month));
   }
 
   async hasAutomationLog(kind: AutomationKind, key: string): Promise<boolean> {
@@ -294,11 +409,30 @@ export class NotionService {
     return dataSourceId;
   }
 
+  async ensureEgcReportsSchema(): Promise<void> {
+    this.requireDataSource("notionEgcReportsDataSourceId");
+    if (this.egcReportsSchemaReady) return;
+
+    await notionJson(this.config, `/v1/data_sources/${this.config.notionEgcReportsDataSourceId}`, "PATCH", {
+      properties: {
+        [EGC_PROPERTIES.slack]: { rich_text: {} },
+        [EGC_PROPERTIES.storySeries]: { number: { format: "number" } },
+        [EGC_PROPERTIES.storySeriesDays]: { rich_text: {} },
+        [EGC_PROPERTIES.coinsToIssue]: { number: { format: "number" } }
+      }
+    });
+
+    this.egcReportsSchemaReady = true;
+  }
+
   private activityFromPage(page: NotionPage): Activity {
+    const key = propertyPlainText(page.properties.Key);
+    const configured = this.config.activities.find((activity) => activity.key === key);
     return {
-      key: propertyPlainText(page.properties.Key),
+      key,
       title: propertyPlainText(page.properties.Activity),
       category: propertyPlainText(page.properties.Category),
+      summaryProperty: propertyPlainText(page.properties["Summary Property"]) || configured?.summaryProperty,
       coinsPerUnit: propertyNumber(page.properties["Coins per Unit"]),
       requiresQuantity: propertyCheckbox(page.properties["Requires Quantity"]),
       requiresProof: propertyCheckbox(page.properties["Requires Proof"]),
@@ -307,14 +441,15 @@ export class NotionService {
     };
   }
 
-  private summaryFromPage(page: NotionPage, fallbackMonth: string): MonthlySummary {
+  private summaryFromPage(page: NotionPage, fallbackMonth: string, activities = this.config.activities): MonthlySummary {
     const selectedMonth = propertyPlainText(page.properties[TRACKER_PROPERTIES.month]);
     const month =
       monthFromUkrainianName(selectedMonth, Number(fallbackMonth.slice(0, 4))) ||
       propertyDate(page.properties.Month).slice(0, 7) ||
       fallbackMonth;
-    const ambassadorName =
+    const participantName =
       propertyPlainText(page.properties[TRACKER_PROPERTIES.title]) ||
+      propertyPlainText(page.properties["Participant Name"]) ||
       propertyPlainText(page.properties["Ambassador Name"]);
     const slackNickname =
       propertyPlainText(page.properties[TRACKER_PROPERTIES.slack]) ||
@@ -323,16 +458,16 @@ export class NotionService {
       propertyNumber(page.properties[TRACKER_PROPERTIES.totalCoins]) ||
       propertyNumber(page.properties["Total Coins"]);
     const activityQuantities = Object.fromEntries(
-      ACTIVITY_SUMMARY_PROPERTIES.map(({ key, property }) => [key, propertyNumber(page.properties[property])])
+      activitySummaryProperties(activities).map(({ key, property }) => [key, propertyNumber(page.properties[property])])
     );
     const distinctCompleted = Object.values(activityQuantities).filter((quantity) => quantity > 0).length;
     const hasActivity =
       propertyCheckbox(page.properties[TRACKER_PROPERTIES.hasActivity]) ||
       distinctCompleted > 0 ||
       totalCoins > 0;
-    const reportName = slackNickname ? displaySlackNickname(slackNickname) : ambassadorName;
+    const reportName = slackNickname ? displaySlackNickname(slackNickname) : participantName;
     return {
-      ambassadorName,
+      participantName,
       month,
       slackNickname,
       hasActivity,
@@ -348,6 +483,73 @@ export class NotionService {
         propertyPlainText(page.properties["Report Line"]) || `${reportName} - ${totalCoins} coins`,
       activityQuantities,
       activityBreakdown: propertyPlainText(page.properties["Activity Breakdown"])
+    };
+  }
+
+  private egcSummaryFromPage(
+    page: NotionPage,
+    fallbackMonth: string,
+    input = this.egcInputFromPage(page, fallbackMonth),
+    totalOverride?: number
+  ): MonthlySummary {
+    const calculated = calculateEgcCoins(input, this.config.egcCoinRates);
+    const formulaCoins = propertyNumber(page.properties[EGC_PROPERTIES.formulaCoins]);
+    const coinsToIssue = propertyNumber(page.properties[EGC_PROPERTIES.coinsToIssue]);
+    const totalCoins = totalOverride ?? (coinsToIssue || formulaCoins || calculated.totalCoins);
+    const slackNickname =
+      normalizeSlackNickname(input.slackNickname) ||
+      normalizeSlackNickname(propertyPlainText(page.properties[EGC_PROPERTIES.slack])) ||
+      propertyPlainText(page.properties.Creator) ||
+      propertyPlainText(page.properties[EGC_PROPERTIES.title]);
+    const participantName = input.participantName || slackNickname;
+    const activityQuantities = {
+      instagramStories: input.instagramStories,
+      instagramVacancyStories: input.instagramVacancyStories,
+      instagramReels: input.instagramReels,
+      instagramPosts: input.instagramPosts,
+      linkedinPosts: input.linkedinPosts,
+      linkedinVacancyPosts: input.linkedinVacancyPosts,
+      instagramStorySeries: input.instagramStorySeries
+    };
+
+    return {
+      participantName,
+      month: input.month || fallbackMonth,
+      slackNickname,
+      hasActivity: Object.values(activityQuantities).some((quantity) => quantity > 0) || totalCoins > 0,
+      baseCoins: totalCoins,
+      distinctCompleted: Object.values(activityQuantities).filter((quantity) => quantity > 0).length,
+      bonusCoins: 0,
+      totalCoins,
+      reportLine: `${displaySlackNickname(slackNickname || participantName)} - ${totalCoins} coins`,
+      activityQuantities,
+      activityBreakdown: calculated.breakdown
+    };
+  }
+
+  private egcInputFromPage(page: NotionPage, fallbackMonth: string): EgcReportInput {
+    const title = propertyPlainText(page.properties[EGC_PROPERTIES.title]);
+    const slack =
+      propertyPlainText(page.properties[EGC_PROPERTIES.slack]) ||
+      propertyPlainText(page.properties.Creator) ||
+      title.replace(/\s+-\s+.+$/, "");
+    const period = propertyDate(page.properties[EGC_PROPERTIES.period]).slice(0, 7) || fallbackMonth;
+
+    return {
+      participantName: title.replace(/\s+-\s+.+$/, "") || slack,
+      slackNickname: slack,
+      month: period,
+      instagramStories: propertyNumber(page.properties[EGC_PROPERTIES.instagramStories]),
+      instagramVacancyStories: propertyNumber(page.properties[EGC_PROPERTIES.instagramVacancyStories]),
+      instagramReels: propertyNumber(page.properties[EGC_PROPERTIES.instagramReels]),
+      instagramPosts: propertyNumber(page.properties[EGC_PROPERTIES.instagramPosts]),
+      linkedinPosts: propertyNumber(page.properties[EGC_PROPERTIES.linkedinPosts]),
+      linkedinVacancyPosts: propertyNumber(page.properties[EGC_PROPERTIES.linkedinVacancyPosts]),
+      instagramStorySeries: propertyNumber(page.properties[EGC_PROPERTIES.storySeries]),
+      storySeriesDays: propertyPlainText(page.properties[EGC_PROPERTIES.storySeriesDays])
+        .split(",")
+        .map((day) => day.trim())
+        .filter(Boolean)
     };
   }
 
@@ -383,7 +585,7 @@ export class NotionService {
   private async findSummaryPage(
     month: string,
     slackNickname: string,
-    ambassadorName?: string,
+    participantName?: string,
     dataSourceId = this.config.notionMonthlySummaryDataSourceId!
   ): Promise<NotionPage | undefined> {
     const monthFilter = { property: TRACKER_PROPERTIES.month, select: { equals: monthUkrainianName(month) } };
@@ -399,17 +601,17 @@ export class NotionService {
       if (bySlack) return bySlack;
     }
 
-    if (!ambassadorName) return undefined;
+    if (!participantName) return undefined;
 
     return this.findFirst(dataSourceId, {
       and: [
         monthFilter,
-        { property: TRACKER_PROPERTIES.title, title: { equals: ambassadorName } }
+        { property: TRACKER_PROPERTIES.title, title: { equals: participantName } }
       ]
     });
   }
 
-  private requireDataSource(key: keyof AppConfig): void {
+  private requireDataSource(key: keyof ProgramConfig): void {
     if (!this.config.notionApiKey || !this.config[key]) {
       throw new Error(`Notion is not configured. Missing ${String(key)}.`);
     }

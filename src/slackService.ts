@@ -2,13 +2,13 @@ import crypto from "node:crypto";
 import { WebClient } from "@slack/web-api";
 import type { AppConfig } from "./config.js";
 import { monthDisplayName } from "./dates.js";
-import type { SubmittedActivity } from "./types.js";
+import type { MonthlySummary, ProgramConfig, SubmittedActivity } from "./types.js";
 import { displaySlackNickname } from "./text.js";
 
 const HOME_ACTIONS = {
-  getReport: "ambassador_get_report",
-  sendReminder: "ambassador_send_reminder",
-  openForm: "ambassador_open_form"
+  getReport: "program_get_report",
+  sendReminder: "program_send_reminder",
+  openForm: "program_open_form"
 } as const;
 
 export type SlackHomeAction = (typeof HOME_ACTIONS)[keyof typeof HOME_ACTIONS];
@@ -17,22 +17,25 @@ export const slackHomeActions = HOME_ACTIONS;
 
 type HomeViewParams = {
   userId: string;
-  month: string;
-  formUrl?: string;
-  detailsUrl: string;
+  programs: Array<{
+    program: ProgramConfig;
+    month: string;
+    formUrl?: string;
+    configured: boolean;
+  }>;
   notice?: string;
 };
 
-export function monthlyReminderText(monthToReport: string, formUrl: string, detailsUrl: string): string {
+export function monthlyReminderText(program: ProgramConfig, monthToReport: string, formUrl: string): string {
   return [
-    "Привіт, амбасадори! ✨",
+    program.slackContent.reminderGreeting,
     "",
-    `Новий місяць уже почався, а це значить, що час заповнити чекліст за *${monthDisplayName(monthToReport)}* 💚`,
+    `${program.slackContent.reminderIntro} за *${monthDisplayName(monthToReport)}*.`,
     "",
-    `📝 <${formUrl}|Заповнити чекліст>`,
-    "📸 Додавайте скріншоти виконаних активностей та отримуйте юнікоіни за свою залученість.",
+    `📝 <${formUrl}|${program.slackContent.reminderCta}>`,
+    `📎 ${program.slackContent.reminderProofHint}`,
     "",
-    `Деталі програми тут: <${detailsUrl}|Ambassador Program for Students> 🌟`
+    `Деталі програми тут: <${program.programDetailsUrl}|${program.slackContent.detailsLabel}>`
   ].join("\n");
 }
 
@@ -84,7 +87,7 @@ export class SlackService {
     });
   }
 
-  async sendSubmissionNotification(params: {
+  async sendSubmissionNotification(program: ProgramConfig, params: {
     month: string;
     slackNickname: string;
     activities: SubmittedActivity[];
@@ -94,18 +97,28 @@ export class SlackService {
       .map((item) => `• ${item.activity.title}: ${item.quantity} × ${item.activity.coinsPerUnit} = ${item.baseCoins}`)
       .join("\n");
     const text = [
-      `Новий ambassador activity report: ${displaySlackNickname(params.slackNickname)} за ${monthDisplayName(params.month)}.`,
+      `${program.slackContent.notificationTitle}: ${displaySlackNickname(params.slackNickname)} за ${monthDisplayName(params.month)}.`,
       lines,
       `Поточний total за місяць: ${params.totalCoins} coins.`
     ].join("\n");
 
-    await this.postMessage(this.config.slackAdminChannelId, text);
+    await this.postMessage(program.slackAdminChannelId, text);
   }
 
-  async sendMonthlyReminder(monthToReport: string, formUrl: string): Promise<void> {
-    const text = monthlyReminderText(monthToReport, formUrl, this.config.programDetailsUrl);
+  async sendEgcSubmissionNotification(program: ProgramConfig, summary: MonthlySummary): Promise<void> {
+    const text = [
+      `${program.slackContent.notificationTitle}: ${displaySlackNickname(summary.slackNickname)} за ${monthDisplayName(summary.month)}.`,
+      summary.activityBreakdown || "Без деталізації активностей.",
+      `До видачі: ${summary.totalCoins} coins.`
+    ].join("\n");
 
-    await this.postMessage(this.config.slackAmbassadorChannelId, text);
+    await this.postMessage(program.slackAdminChannelId, text);
+  }
+
+  async sendMonthlyReminder(program: ProgramConfig, monthToReport: string, formUrl: string): Promise<void> {
+    const text = monthlyReminderText(program, monthToReport, formUrl);
+
+    await this.postMessage(program.slackCommunityChannelId, text);
   }
 
   async publishHome(params: HomeViewParams): Promise<void> {
@@ -117,22 +130,21 @@ export class SlackService {
       user_id: params.userId,
       view: {
         type: "home",
-        callback_id: "ambassador_home",
-        private_metadata: JSON.stringify({ month: params.month }),
+        callback_id: "program_home",
         blocks: buildHomeBlocks(params)
       }
     });
   }
 
-  async sendMonthlyReport(month: string, reportText: string): Promise<void> {
-    const channel = this.config.slackReportChannelId ?? this.config.slackAdminChannelId;
+  async sendMonthlyReport(program: ProgramConfig, month: string, reportText: string): Promise<void> {
+    const channel = program.slackReportChannelId ?? program.slackAdminChannelId;
     await this.postMessage(channel, reportText);
   }
 
-  async sendReportToUser(userId: string, month: string, reportText: string): Promise<void> {
+  async sendReportToUser(program: ProgramConfig, userId: string, month: string, reportText: string): Promise<void> {
     await this.postMessage(
       userId,
-      [`Ось report за *${monthDisplayName(month)}* 📊`, "", `\`\`\`${reportText}\`\`\``].join("\n")
+      [`Ось ${program.shortName} report за *${monthDisplayName(month)}*`, "", `\`\`\`${reportText}\`\`\``].join("\n")
     );
   }
 
@@ -171,7 +183,7 @@ function buildHomeBlocks(params: HomeViewParams) {
       type: "header",
       text: {
         type: "plain_text",
-        text: "Ambassador Coins"
+        text: "Program Coins"
       }
     },
     {
@@ -179,8 +191,8 @@ function buildHomeBlocks(params: HomeViewParams) {
       text: {
         type: "mrkdwn",
         text: [
-          `Привіт! Тут можна швидко керувати амбасадорськими коінами за *${monthDisplayName(params.month)}*.`,
-          "Період підставляю автоматично за попередній місяць, щоб тобі не доводилося шукати його вручну."
+          "Привіт! Тут можна керувати коінами для кількох програм з одного Slack bot.",
+          "Період підставляю автоматично за попередній місяць, а програми розділяю нижче."
         ].join("\n")
       }
     }
@@ -198,74 +210,93 @@ function buildHomeBlocks(params: HomeViewParams) {
     });
   }
 
-  blocks.push({
-    type: "actions",
-    block_id: "ambassador_home_actions",
-    elements: [
-      ...(params.formUrl
-        ? [
-            {
-              type: "button",
-              text: {
-                type: "plain_text",
-                text: "Відкрити форму"
-              },
-              action_id: HOME_ACTIONS.openForm,
-              value: params.month,
-              url: params.formUrl
-            }
-          ]
-        : []),
+  params.programs.forEach((item, index) => {
+    if (index > 0) {
+      blocks.push({ type: "divider" });
+    }
+
+    blocks.push(
       {
-        type: "button",
+        type: "section",
         text: {
-          type: "plain_text",
-          text: "Отримати звіт"
-        },
-        action_id: HOME_ACTIONS.getReport,
-        value: params.month,
-        style: "primary"
+          type: "mrkdwn",
+          text: [
+            `*${item.program.slackContent.homeTitle}*`,
+            `${item.program.slackContent.homeDescription}`,
+            item.configured
+              ? `Поточний період: *${monthDisplayName(item.month)}*.`
+              : "_Notion data sources ще не налаштовані для цієї програми._"
+          ].join("\n")
+        }
       },
       {
-        type: "button",
-        text: {
-          type: "plain_text",
-          text: "Надіслати нагадування"
-        },
-        action_id: HOME_ACTIONS.sendReminder,
-        value: params.month,
-        confirm: confirmDialog(
-          "Надіслати нагадування?",
-          "Я напишу в ambassador channel м'яке нагадування, якщо за цей місяць воно ще не відправлялося."
-        )
+        type: "actions",
+        block_id: `${item.program.key}_home_actions`,
+        elements: [
+          ...(item.formUrl
+            ? [
+                {
+                  type: "button",
+                  text: {
+                    type: "plain_text",
+                    text: "Відкрити форму"
+                  },
+                  action_id: HOME_ACTIONS.openForm,
+                  value: actionValue(item.program.key, item.month),
+                  url: item.formUrl
+                }
+              ]
+            : []),
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "Отримати звіт"
+            },
+            action_id: HOME_ACTIONS.getReport,
+            value: actionValue(item.program.key, item.month),
+            style: "primary"
+          },
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "Надіслати нагадування"
+            },
+            action_id: HOME_ACTIONS.sendReminder,
+            value: actionValue(item.program.key, item.month),
+            confirm: confirmDialog(
+              "Надіслати нагадування?",
+              `Я напишу в ${item.program.slackContent.reminderChannelLabel}, якщо за цей місяць воно ще не відправлялося.`
+            )
+          }
+        ]
+      },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `Деталі: <${item.program.programDetailsUrl}|${item.program.slackContent.detailsLabel}>`
+          }
+        ]
       }
-    ]
-  });
-
-  blocks.push(
-    {
-      type: "context",
-      elements: [
-        {
-          type: "mrkdwn",
-          text: `Хочеш звірити правила? Ось деталі програми: <${params.detailsUrl}|Ambassador Program for Students>`
-        }
-      ]
-    },
-    {
-      type: "divider"
-    }
-  );
-
-  blocks.push({
-    type: "section",
-    text: {
-      type: "mrkdwn",
-      text: "Потрібен звіт? Натисни *Отримати звіт*, і я одразу надішлю його тобі в *Messages*."
-    }
+    );
   });
 
   return blocks;
+}
+
+export function actionValue(programKey: string, month: string): string {
+  return `${programKey}:${month}`;
+}
+
+export function parseActionValue(value: string | undefined): { programKey?: string; month?: string } {
+  const match = /^(?<programKey>[a-z0-9_-]+):(?<month>\d{4}-\d{2})$/.exec(value ?? "");
+  return {
+    programKey: match?.groups?.programKey,
+    month: match?.groups?.month
+  };
 }
 
 function confirmDialog(title: string, text: string) {

@@ -3,12 +3,12 @@ import helmet from "helmet";
 import multer from "multer";
 import path from "node:path";
 import { z } from "zod";
-import { AmbassadorProgram } from "./ambassadorProgram.js";
+import { RewardsProgram } from "./ambassadorProgram.js";
 import { loadConfig } from "./config.js";
 import { monthDisplayName, previousMonth } from "./dates.js";
 import { NotionService } from "./notionService.js";
-import { SlackService, slackHomeActions } from "./slackService.js";
-import { startScheduler } from "./scheduler.js";
+import { parseActionValue, SlackService, slackHomeActions } from "./slackService.js";
+import { startSchedulers } from "./scheduler.js";
 
 declare global {
   namespace Express {
@@ -28,7 +28,7 @@ const upload = multer({
 });
 
 const SubmitSchema = z.object({
-  ambassadorName: z.string().trim().min(2),
+  participantName: z.string().trim().min(2),
   slackNickname: z.string().trim().min(2),
   slackUserId: z.string().trim().optional(),
   month: z.string().regex(/^\d{4}-\d{2}$/),
@@ -42,6 +42,30 @@ const SubmitSchema = z.object({
     )
     .min(1)
     .max(20)
+});
+
+const EgcSubmitSchema = z.object({
+  participantName: z.string().trim().min(2),
+  slackNickname: z.string().trim().min(2),
+  slackUserId: z.string().trim().optional(),
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  instagramStories: z.coerce.number().int().min(0),
+  instagramVacancyStories: z.coerce.number().int().min(0),
+  instagramReels: z.coerce.number().int().min(0),
+  instagramPosts: z.coerce.number().int().min(0),
+  linkedinPosts: z.coerce.number().int().min(0),
+  linkedinVacancyPosts: z.coerce.number().int().min(0),
+  instagramStorySeries: z.coerce.number().int().min(0),
+  storySeriesDays: z.preprocess((value) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value !== "string" || !value.trim()) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return value.split(",").map((item) => item.trim()).filter(Boolean);
+    }
+  }, z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).default([]))
 });
 
 const SlackCommandSchema = z.object({
@@ -81,9 +105,16 @@ const SlackInteractionSchema = z.object({
 });
 
 const config = loadConfig();
-const notion = new NotionService(config);
 const slack = new SlackService(config);
-const program = new AmbassadorProgram(config, notion, slack);
+const programs = config.programs.map((programConfig) => {
+  const notion = new NotionService(programConfig);
+  return {
+    config: programConfig,
+    notion,
+    program: new RewardsProgram(programConfig, notion, slack)
+  };
+});
+const defaultProgram = programs[0];
 const app = express();
 
 app.use(
@@ -101,6 +132,9 @@ app.use(
   })
 );
 app.use(express.static(publicDir));
+app.get(["/ambassador", "/egc"], (_req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"));
+});
 app.use(
   express.urlencoded({
     extended: true,
@@ -120,23 +154,95 @@ app.use(
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
-    notionConfigured: notion.isConfigured(),
-    slackConfigured: slack.isConfigured()
+    slackConfigured: slack.isConfigured(),
+    programs: programs.map((item) => ({
+      key: item.config.key,
+      slug: item.config.slug,
+      notionConfigured: item.notion.isConfigured()
+    }))
+  });
+});
+
+app.get("/api/programs", (_req, res) => {
+  res.json({
+    programs: programs.map((item) => ({
+      key: item.config.key,
+      slug: item.config.slug,
+      displayName: item.config.displayName,
+      shortName: item.config.shortName,
+      configured: item.notion.isConfigured()
+    }))
   });
 });
 
 app.get("/api/form-config", async (_req, res, next) => {
+  await sendFormConfig(defaultProgram.config.slug, res, next);
+});
+
+app.get("/api/programs/:program/form-config", async (req, res, next) => {
+  await sendFormConfig(req.params.program, res, next);
+});
+
+async function sendFormConfig(programSlug: string, res: express.Response, next: express.NextFunction) {
   try {
-    res.json(await program.getFormConfig());
+    const runtime = findProgram(programSlug);
+    if (!runtime) {
+      res.status(404).json({ ok: false, error: "Unknown program." });
+      return;
+    }
+    res.json(await runtime.program.getFormConfig());
   } catch (error) {
     next(error);
   }
-});
+}
 
 app.post("/api/submissions", upload.any(), async (req, res, next) => {
+  await receiveSubmission(defaultProgram.config.slug, req, res, next);
+});
+
+app.post("/api/programs/:program/submissions", upload.any(), async (req, res, next) => {
+  await receiveSubmission(String(req.params.program), req, res, next);
+});
+
+async function receiveSubmission(
+  programSlug: string,
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+) {
   try {
+    const runtime = findProgram(programSlug);
+    if (!runtime) {
+      res.status(404).json({ ok: false, error: "Unknown program." });
+      return;
+    }
+
+    if (runtime.config.mode === "egc-report") {
+      const parsed = EgcSubmitSchema.parse({
+        participantName: req.body.participantName ?? req.body.slackNickname,
+        slackNickname: req.body.slackNickname,
+        slackUserId: req.body.slackUserId,
+        month: req.body.month,
+        instagramStories: req.body.instagramStories,
+        instagramVacancyStories: req.body.instagramVacancyStories,
+        instagramReels: req.body.instagramReels,
+        instagramPosts: req.body.instagramPosts,
+        linkedinPosts: req.body.linkedinPosts,
+        linkedinVacancyPosts: req.body.linkedinVacancyPosts,
+        instagramStorySeries: req.body.instagramStorySeries,
+        storySeriesDays: req.body.storySeriesDays
+      });
+      const proofFiles = ((req.files ?? []) as Express.Multer.File[]).filter((file) => file.fieldname === "egcProofs");
+      const summary = await runtime.program.submitEgcReport(
+        { ...parsed, instagramStorySeries: parsed.storySeriesDays.length },
+        proofFiles
+      );
+      res.json({ ok: true, summary });
+      return;
+    }
+
     const parsed = SubmitSchema.parse({
-      ambassadorName: req.body.ambassadorName,
+      participantName: req.body.participantName ?? req.body.ambassadorName,
       slackNickname: req.body.slackNickname,
       slackUserId: req.body.slackUserId,
       month: req.body.month,
@@ -151,12 +257,12 @@ app.post("/api/submissions", upload.any(), async (req, res, next) => {
       filesByActivityIndex.set(index, [...(filesByActivityIndex.get(index) ?? []), file]);
     }
 
-    const summary = await program.submit(parsed, filesByActivityIndex);
+    const summary = await runtime.program.submit(parsed, filesByActivityIndex);
     res.json({ ok: true, summary });
   } catch (error) {
     next(error);
   }
-});
+}
 
 app.post("/slack/commands", async (req, res, next) => {
   try {
@@ -172,16 +278,21 @@ app.post("/slack/commands", async (req, res, next) => {
     }
 
     const command = SlackCommandSchema.parse(req.body);
-    const requested = command.text?.trim();
-    const month = !requested || requested === "last" ? previousMonth(config.timezone) : requested;
+    const parts = command.text?.trim().split(/\s+/).filter(Boolean) ?? [];
+    const requestedProgram = parts[0] && findProgram(parts[0]) ? parts.shift()! : defaultProgram.config.slug;
+    const runtime = findProgram(requestedProgram) ?? defaultProgram;
+    const requestedMonth = parts[0];
+    const month = !requestedMonth || requestedMonth === "last"
+      ? previousMonth(runtime.config.timezone)
+      : requestedMonth;
 
     if (!/^\d{4}-\d{2}$/.test(month)) {
-      res.send("Use `/ambassador-report last` or `/ambassador-report YYYY-MM`.");
+      res.send("Use `/program-report ambassador last`, `/program-report egc last`, or `/program-report egc YYYY-MM`.");
       return;
     }
 
-    res.send(`Generating ambassador report for ${month}...`);
-    const report = await program.buildMonthlyReport(month);
+    res.send(`Generating ${runtime.config.shortName} report for ${month}...`);
+    const report = await runtime.program.buildMonthlyReport(month);
     await slack.respondToSlackResponseUrl(command.response_url, report);
   } catch (error) {
     next(error);
@@ -251,56 +362,80 @@ async function handleSlackInteraction(payload: z.infer<typeof SlackInteractionSc
   const action = payload.actions?.[0];
   if (!action) return;
 
-  const month = action.value && /^\d{4}-\d{2}$/.test(action.value)
-    ? action.value
-    : previousMonth(config.timezone);
+  const parsed = parseActionValue(action.value);
+  const runtime = findProgram(parsed.programKey ?? defaultProgram.config.slug) ?? defaultProgram;
+  const month = parsed.month && /^\d{4}-\d{2}$/.test(parsed.month)
+    ? parsed.month
+    : previousMonth(runtime.config.timezone);
 
   if (action.action_id === slackHomeActions.getReport) {
-    const report = await program.buildMonthlyReport(month);
-    await slack.sendReportToUser(payload.user.id, month, report);
+    if (!runtime.notion.isConfigured()) {
+      await publishSlackHome(payload.user.id, {
+        notice: `${runtime.config.shortName} ще не налаштована в Notion, тому звіт поки недоступний.`
+      });
+      return;
+    }
+    const report = await runtime.program.buildMonthlyReport(month);
+    await slack.sendReportToUser(runtime.config, payload.user.id, month, report);
     await publishSlackHome(payload.user.id, {
-      month,
-      notice: `Готово, звіт за ${monthDisplayName(month)} вже чекає на тебе в Messages.`
+      notice: `Готово, ${runtime.config.shortName} звіт за ${monthDisplayName(month)} вже чекає на тебе в Messages.`
     });
     return;
   }
 
   if (action.action_id === slackHomeActions.sendReminder) {
-    const sent = await program.sendReminderIfDue(month, `reminder:${month}`);
+    if (!runtime.notion.isConfigured()) {
+      await publishSlackHome(payload.user.id, {
+        notice: `${runtime.config.shortName} ще не налаштована в Notion, тому reminder поки недоступний.`
+      });
+      return;
+    }
+    const sent = await runtime.program.sendReminderIfDue(month, `${runtime.config.key}:reminder:${month}`);
     await publishSlackHome(payload.user.id, {
-      month,
       notice: sent
-        ? `Готово, дружнє нагадування за ${monthDisplayName(month)} полетіло в ambassador channel.`
-        : `Нагадування за ${monthDisplayName(month)} не відправила: воно вже було надіслане або ambassador channel ще не налаштований.`
+        ? `Готово, ${runtime.config.shortName} нагадування за ${monthDisplayName(month)} відправлено.`
+        : `${runtime.config.shortName} нагадування за ${monthDisplayName(month)} не відправила: воно вже було надіслане або channel ще не налаштований.`
     });
     return;
   }
 
   if (action.action_id === slackHomeActions.openForm) {
-    await publishSlackHome(payload.user.id, { month });
+    await publishSlackHome(payload.user.id);
   }
 }
 
 async function publishSlackHome(
   userId: string,
-  options: { month?: string; notice?: string } = {}
+  options: { notice?: string } = {}
 ): Promise<void> {
-  const month = options.month ?? previousMonth(config.timezone);
-  const formUrl = config.publicBaseUrl ? program.formUrlForMonth(month) : undefined;
   await slack.publishHome({
     userId,
-    month,
-    formUrl,
-    detailsUrl: config.programDetailsUrl,
+    programs: programs.map((runtime) => {
+      const month = previousMonth(runtime.config.timezone);
+      return {
+        program: runtime.config,
+        month,
+        formUrl: runtime.config.publicBaseUrl ? runtime.program.formUrlForMonth(month) : undefined,
+        configured: runtime.notion.isConfigured()
+      };
+    }),
     notice: options.notice
   });
 }
 
 app.listen(config.port, () => {
-  console.log(`Ambassador app listening on ${config.port}`);
-  if (notion.isConfigured()) {
-    startScheduler(config, program);
-  } else {
-    console.warn("Notion is not configured. Scheduler is disabled until env vars are set.");
+  console.log(`Program coins app listening on ${config.port}`);
+  const configuredPrograms = programs.filter((item) => item.notion.isConfigured()).map((item) => item.program);
+  if (configuredPrograms.length) {
+    startSchedulers(config, configuredPrograms);
+  }
+  for (const item of programs) {
+    if (!item.notion.isConfigured()) {
+      console.warn(`${item.config.displayName} Notion is not configured. Scheduler is disabled for this program.`);
+    }
   }
 });
+
+function findProgram(slugOrKey: string) {
+  return programs.find((item) => item.config.slug === slugOrKey || item.config.key === slugOrKey);
+}
