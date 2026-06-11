@@ -883,6 +883,7 @@
         "Листопад",
         "Грудень"
       ];
+      const MAX_EGC_PROOF_FILES = 10;
 
       const state = {
         programSlug: getProgramSlug(),
@@ -1117,7 +1118,7 @@
             <div class="field egc-wide">
               <span class="field-label">Додай скріншоти постів і рілз</span>
               <label class="drop-zone" tabindex="0">
-                <input class="proof-input" name="egcProofs" type="file" multiple accept="image/*,.pdf" />
+                <input class="proof-input" name="egcProofs" type="file" multiple accept="image/*,.pdf" data-max-files="${MAX_EGC_PROOF_FILES}" />
                 <i class="ti ti-upload" aria-hidden="true"></i>
                 <span class="drop-zone-title">Прикріпи файли</span>
                 <span class="helper">Сторіз можеш не додавати. До 10 файлів у формі.</span>
@@ -1553,13 +1554,13 @@
       function keepPreviousPickerFiles(input) {
         const previousFiles = input._filesBeforePicker || [];
         input._filesBeforePicker = [];
-        if (!previousFiles.length) return;
+        if (!previousFiles.length && !maxFilesForInput(input)) return false;
 
-        setInputFiles(input, mergeFiles(previousFiles, Array.from(input.files)), { dispatchChange: false });
+        return setInputFiles(input, mergeFiles(previousFiles, Array.from(input.files)), { dispatchChange: false });
       }
 
       function appendInputFiles(input, files) {
-        setInputFiles(input, mergeFiles(Array.from(input.files), files));
+        return setInputFiles(input, mergeFiles(Array.from(input.files), files));
       }
 
       function mergeFiles(existingFiles, addedFiles) {
@@ -1574,14 +1575,39 @@
         return files;
       }
 
+      function maxFilesForInput(input) {
+        const maxFiles = Number(input.dataset.maxFiles || 0);
+        return Number.isInteger(maxFiles) && maxFiles > 0 ? maxFiles : 0;
+      }
+
+      function limitFilesForInput(input, files) {
+        const maxFiles = maxFilesForInput(input);
+        if (!maxFiles || files.length <= maxFiles) {
+          return { files, limited: false };
+        }
+
+        return { files: files.slice(0, maxFiles), limited: true };
+      }
+
+      function showFileLimitMessage(input) {
+        const maxFiles = maxFilesForInput(input);
+        if (!maxFiles) return;
+        showResult(`Можна додати максимум ${maxFiles} файлів. Зайві файли не додано.`, true);
+      }
+
       function setInputFiles(input, files, options = {}) {
+        const limitedResult = limitFilesForInput(input, files);
         const dataTransfer = new DataTransfer();
-        files.forEach((file) => dataTransfer.items.add(file));
+        limitedResult.files.forEach((file) => dataTransfer.items.add(file));
         input._filesBeforePicker = [];
         input.files = dataTransfer.files;
         if (options.dispatchChange !== false) {
           input.dispatchEvent(new Event("change", { bubbles: true }));
         }
+        if (limitedResult.limited) {
+          showFileLimitMessage(input);
+        }
+        return limitedResult.limited;
       }
 
       async function submitForm(event) {

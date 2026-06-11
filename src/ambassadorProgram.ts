@@ -5,6 +5,8 @@ import { SlackService } from "./slackService.js";
 import { displaySlackNickname, normalizeSlackNickname } from "./text.js";
 import type { EgcReportInput, MonthlySummary, ProgramConfig, SubmissionInput, SubmittedActivity } from "./types.js";
 
+export const EGC_MAX_PROOF_FILES = 10;
+
 export class RewardsProgram {
   constructor(
     readonly config: ProgramConfig,
@@ -121,6 +123,9 @@ export class RewardsProgram {
     }
     if (!this.notion.isConfigured()) {
       throw new Error(`${this.config.displayName} Notion EGC reports data source is not configured yet.`);
+    }
+    if (files.length > EGC_MAX_PROOF_FILES) {
+      throw new Error(`Можна додати максимум ${EGC_MAX_PROOF_FILES} файлів до EGC форми.`);
     }
 
     const normalizedInput: EgcReportInput = {

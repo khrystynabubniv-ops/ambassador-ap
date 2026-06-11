@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AmbassadorProgram } from "../src/ambassadorProgram.js";
+import { AmbassadorProgram, EGC_MAX_PROOF_FILES } from "../src/ambassadorProgram.js";
 import { DEFAULT_ACTIVITIES } from "../src/activities.js";
 import { calculateActivityCoins, calculateEgcCoins, calculateMonthlySummary, normalizeQuantity } from "../src/coins.js";
 import { loadConfig } from "../src/config.js";
@@ -97,6 +97,45 @@ describe("coin calculation", () => {
 
     expect(summary.totalCoins).toBe(56);
     expect(summary.breakdown).toContain("Дні з серією сторіз в Instagram: 1 (3 coins)");
+  });
+
+  it("rejects EGC reports with more than ten proof files", async () => {
+    const egcConfig = loadConfig().programs.find((program) => program.key === "egc")!;
+    const program = new AmbassadorProgram(
+      egcConfig,
+      {
+        isConfigured: () => true,
+        createEgcReport: async () => {
+          throw new Error("Should not create report when file limit is exceeded.");
+        }
+      } as any,
+      { sendEgcSubmissionNotification: async () => undefined } as any
+    );
+    const files = Array.from({ length: EGC_MAX_PROOF_FILES + 1 }, (_, index) => ({
+      fieldname: "egcProofs",
+      originalname: `proof-${index}.jpg`,
+      mimetype: "image/jpeg",
+      size: 100
+    })) as Express.Multer.File[];
+
+    await expect(
+      program.submitEgcReport(
+        {
+          participantName: "Diana Bondarenko",
+          slackNickname: "Diana Bondarenko",
+          month: "2026-05",
+          instagramStories: 1,
+          instagramVacancyStories: 0,
+          instagramReels: 0,
+          instagramPosts: 0,
+          linkedinPosts: 0,
+          linkedinVacancyPosts: 0,
+          instagramStorySeries: 0,
+          storySeriesDays: []
+        },
+        files
+      )
+    ).rejects.toThrow(`максимум ${EGC_MAX_PROOF_FILES} файлів`);
   });
 
   it("keeps monthly reports focused on participants with activity", async () => {
