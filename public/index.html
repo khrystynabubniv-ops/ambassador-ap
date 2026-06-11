@@ -1040,7 +1040,11 @@
 
         const proofInput = report.querySelector(".proof-input");
         const dropZone = report.querySelector(".drop-zone");
+        proofInput.addEventListener("click", () => {
+          rememberFilesBeforePicker(proofInput);
+        });
         proofInput.addEventListener("change", () => {
+          keepPreviousPickerFiles(proofInput);
           renderEgcFileList(report);
           updateSubmitState();
         });
@@ -1060,7 +1064,7 @@
           dropZone.classList.remove("is-dragging");
           const files = Array.from(event.dataTransfer?.files || []);
           if (!files.length) return;
-          setInputFiles(proofInput, [...Array.from(proofInput.files), ...files]);
+          appendInputFiles(proofInput, files);
         });
 
         updateSummary();
@@ -1216,7 +1220,11 @@
           updateSummary();
         });
 
+        proofInput.addEventListener("click", () => {
+          rememberFilesBeforePicker(proofInput);
+        });
         proofInput.addEventListener("change", () => {
+          keepPreviousPickerFiles(proofInput);
           renderFileList(row);
           updateSummary();
         });
@@ -1237,7 +1245,7 @@
           dropZone.classList.remove("is-dragging");
           const files = Array.from(event.dataTransfer?.files || []);
           if (!files.length) return;
-          setInputFiles(proofInput, [...Array.from(proofInput.files), ...files]);
+          appendInputFiles(proofInput, files);
         });
 
         commentToggle.addEventListener("click", () => {
@@ -1538,11 +1546,42 @@
         updateSubmitState();
       }
 
-      function setInputFiles(input, files) {
+      function rememberFilesBeforePicker(input) {
+        input._filesBeforePicker = Array.from(input.files);
+      }
+
+      function keepPreviousPickerFiles(input) {
+        const previousFiles = input._filesBeforePicker || [];
+        input._filesBeforePicker = [];
+        if (!previousFiles.length) return;
+
+        setInputFiles(input, mergeFiles(previousFiles, Array.from(input.files)), { dispatchChange: false });
+      }
+
+      function appendInputFiles(input, files) {
+        setInputFiles(input, mergeFiles(Array.from(input.files), files));
+      }
+
+      function mergeFiles(existingFiles, addedFiles) {
+        const files = [];
+        const seen = new Set();
+        [...existingFiles, ...addedFiles].forEach((file) => {
+          const key = [file.name, file.size, file.lastModified, file.type].join(":");
+          if (seen.has(key)) return;
+          seen.add(key);
+          files.push(file);
+        });
+        return files;
+      }
+
+      function setInputFiles(input, files, options = {}) {
         const dataTransfer = new DataTransfer();
         files.forEach((file) => dataTransfer.items.add(file));
+        input._filesBeforePicker = [];
         input.files = dataTransfer.files;
-        input.dispatchEvent(new Event("change", { bubbles: true }));
+        if (options.dispatchChange !== false) {
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
       }
 
       async function submitForm(event) {
