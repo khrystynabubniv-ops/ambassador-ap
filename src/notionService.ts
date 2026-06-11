@@ -22,7 +22,12 @@ import {
 } from "./notionClient.js";
 import { displaySlackNickname, normalizeSlackNickname, truncateForNotion } from "./text.js";
 import { activitySummaryProperties, TRACKER_PROPERTIES } from "./notionSchema.js";
-import { MAX_PROOF_FILE_SIZE_BYTES, MAX_PROOF_FILE_SIZE_MB } from "./uploadLimits.js";
+import {
+  MAX_PROOF_FILE_SIZE_BYTES,
+  MAX_PROOF_FILE_SIZE_MB,
+  NOTION_MULTIPART_CHUNK_SIZE_BYTES,
+  NOTION_SINGLE_PART_FILE_SIZE_BYTES
+} from "./uploadLimits.js";
 
 type NotionPage = {
   id: string;
@@ -562,20 +567,51 @@ export class NotionService {
         throw new Error(`${file.originalname} більший за ${MAX_PROOF_FILE_SIZE_MB} MB. Стисни файл або завантаж менший.`);
       }
 
-      const created = await notionJson<{ id: string }>(this.config, "/v1/file_uploads", "POST", {
-        mode: "single_part",
-        filename: file.originalname,
-        content_type: file.mimetype || "application/octet-stream"
-      });
-
-      const formData = new FormData();
-      const blob = new Blob([file.buffer as unknown as BlobPart], { type: file.mimetype || "application/octet-stream" });
-      formData.append("file", blob, file.originalname);
-      await notionForm(this.config, `/v1/file_uploads/${created.id}/send`, formData);
-      uploads.push({ id: created.id, name: file.originalname });
+      const uploadId = file.size <= NOTION_SINGLE_PART_FILE_SIZE_BYTES
+        ? await this.uploadSinglePartProof(file)
+        : await this.uploadMultiPartProof(file);
+      uploads.push({ id: uploadId, name: file.originalname });
     }
 
     return uploads;
+  }
+
+  private async uploadSinglePartProof(file: Express.Multer.File): Promise<string> {
+    const created = await notionJson<{ id: string }>(this.config, "/v1/file_uploads", "POST", {
+      mode: "single_part",
+      filename: file.originalname,
+      content_type: file.mimetype || "application/octet-stream"
+    });
+
+    const formData = new FormData();
+    const blob = new Blob([file.buffer as unknown as BlobPart], { type: file.mimetype || "application/octet-stream" });
+    formData.append("file", blob, file.originalname);
+    await notionForm(this.config, `/v1/file_uploads/${created.id}/send`, formData);
+    return created.id;
+  }
+
+  private async uploadMultiPartProof(file: Express.Multer.File): Promise<string> {
+    const numberOfParts = Math.ceil(file.buffer.length / NOTION_MULTIPART_CHUNK_SIZE_BYTES);
+    const created = await notionJson<{ id: string }>(this.config, "/v1/file_uploads", "POST", {
+      mode: "multi_part",
+      filename: file.originalname,
+      content_type: file.mimetype || "application/octet-stream",
+      number_of_parts: numberOfParts
+    });
+
+    for (let partNumber = 1; partNumber <= numberOfParts; partNumber += 1) {
+      const start = (partNumber - 1) * NOTION_MULTIPART_CHUNK_SIZE_BYTES;
+      const end = Math.min(start + NOTION_MULTIPART_CHUNK_SIZE_BYTES, file.buffer.length);
+      const partBuffer = file.buffer.subarray(start, end);
+      const formData = new FormData();
+      const blob = new Blob([partBuffer as unknown as BlobPart], { type: file.mimetype || "application/octet-stream" });
+      formData.append("file", blob, file.originalname);
+      formData.append("part_number", String(partNumber));
+      await notionForm(this.config, `/v1/file_uploads/${created.id}/send`, formData);
+    }
+
+    await notionJson(this.config, `/v1/file_uploads/${created.id}/complete`, "POST");
+    return created.id;
   }
 
   private async findFirst(dataSourceId: string, filter: Record<string, unknown>): Promise<NotionPage | undefined> {

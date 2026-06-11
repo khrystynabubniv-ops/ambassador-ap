@@ -1,14 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AmbassadorProgram } from "../src/ambassadorProgram.js";
 import { DEFAULT_ACTIVITIES } from "../src/activities.js";
 import { calculateActivityCoins, calculateEgcCoins, calculateMonthlySummary, normalizeQuantity } from "../src/coins.js";
 import { loadConfig } from "../src/config.js";
+import { NotionService } from "../src/notionService.js";
 import { monthlyReminderText } from "../src/slackService.js";
 import { displaySlackNickname, normalizeSlackNickname } from "../src/text.js";
-import { EGC_MAX_PROOF_FILES } from "../src/uploadLimits.js";
+import { EGC_MAX_PROOF_FILES, NOTION_MULTIPART_CHUNK_SIZE_BYTES } from "../src/uploadLimits.js";
 
 describe("coin calculation", () => {
   const ambassadorConfig = loadConfig().programs[0];
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
 
   it("requires proof only for screenshot-marked activity types", () => {
     const proofRequiredKeys = DEFAULT_ACTIVITIES
@@ -137,6 +144,38 @@ describe("coin calculation", () => {
         files
       )
     ).rejects.toThrow(`максимум ${EGC_MAX_PROOF_FILES} файлів`);
+  });
+
+  it("uploads proof files larger than 20 MB using Notion multi-part mode", async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ id: "upload-id" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }) as typeof fetch;
+    const service = new NotionService({ notionApiKey: "secret" } as any);
+    const file = {
+      originalname: "large-proof.png",
+      mimetype: "image/png",
+      buffer: Buffer.alloc(NOTION_MULTIPART_CHUNK_SIZE_BYTES * 2 + 1),
+      size: NOTION_MULTIPART_CHUNK_SIZE_BYTES * 2 + 1
+    } as Express.Multer.File;
+
+    await expect((service as any).uploadMultiPartProof(file)).resolves.toBe("upload-id");
+
+    const createBody = JSON.parse(String(calls[0].init?.body));
+    expect(createBody).toMatchObject({
+      mode: "multi_part",
+      filename: "large-proof.png",
+      content_type: "image/png",
+      number_of_parts: 3
+    });
+    const sendCalls = calls.filter((call) => call.url.endsWith("/send"));
+    expect(sendCalls).toHaveLength(3);
+    expect(sendCalls.map((call) => (call.init?.body as FormData).get("part_number"))).toEqual(["1", "2", "3"]);
+    expect(calls.at(-1)?.url).toContain("/file_uploads/upload-id/complete");
   });
 
   it("keeps monthly reports focused on participants with activity", async () => {
