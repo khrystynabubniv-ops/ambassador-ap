@@ -75,6 +75,7 @@ export type ProgramConfig = {
   slackCommunityChannelId?: string;
   slackAdminChannelId?: string;
   slackReportChannelId?: string;
+  slackReportMentionUserId?: string;
   programDetailsUrl: string;
   timezone: string;
   reminderDay: number;

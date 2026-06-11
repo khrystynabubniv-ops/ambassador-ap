@@ -39,6 +39,18 @@ export function monthlyReminderText(program: ProgramConfig, monthToReport: strin
   ].join("\n");
 }
 
+export function monthlyReportText(program: ProgramConfig, month: string, reportText: string): string {
+  if (!program.slackReportMentionUserId) {
+    return reportText;
+  }
+
+  return [
+    `<@${program.slackReportMentionUserId}>, нагадування: видай ${program.shortName} коіни за *${monthDisplayName(month)}*.`,
+    "",
+    `\`\`\`${reportText}\`\`\``
+  ].join("\n");
+}
+
 export class SlackService {
   private readonly client?: WebClient;
 
@@ -138,7 +150,7 @@ export class SlackService {
 
   async sendMonthlyReport(program: ProgramConfig, month: string, reportText: string): Promise<void> {
     const channel = program.slackReportChannelId ?? program.slackAdminChannelId;
-    await this.postMessage(channel, reportText);
+    await this.postMessage(channel, monthlyReportText(program, month, reportText));
   }
 
   async sendReportToUser(program: ProgramConfig, userId: string, month: string, reportText: string): Promise<void> {

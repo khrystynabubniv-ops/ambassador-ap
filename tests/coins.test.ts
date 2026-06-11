@@ -4,7 +4,7 @@ import { DEFAULT_ACTIVITIES } from "../src/activities.js";
 import { calculateActivityCoins, calculateEgcCoins, calculateMonthlySummary, normalizeQuantity } from "../src/coins.js";
 import { loadConfig } from "../src/config.js";
 import { NotionService } from "../src/notionService.js";
-import { monthlyReminderText } from "../src/slackService.js";
+import { monthlyReminderText, monthlyReportText } from "../src/slackService.js";
 import { displaySlackNickname, normalizeSlackNickname } from "../src/text.js";
 import { EGC_MAX_PROOF_FILES, NOTION_MULTIPART_CHUNK_SIZE_BYTES } from "../src/uploadLimits.js";
 
@@ -86,6 +86,18 @@ describe("coin calculation", () => {
     expect(message).toContain("чекліст за *квітень 2026*");
     expect(message).toContain("<https://ambassador-ap-production.up.railway.app/ambassador?month=2026-04|Заповнити чекліст>");
     expect(message).toContain("юнікоіни");
+  });
+
+  it("mentions the configured owner in scheduled monthly reports", () => {
+    const egcConfig = {
+      ...loadConfig().programs.find((program) => program.key === "egc")!,
+      slackReportMentionUserId: "U07LJE64188"
+    };
+
+    const message = monthlyReportText(egcConfig, "2026-05", "EGC coins to issue - травень 2026\n\n@diana - 22 coins");
+
+    expect(message).toContain("<@U07LJE64188>, нагадування: видай EGC коіни за *травень 2026*.");
+    expect(message).toContain("EGC coins to issue - травень 2026");
   });
 
   it("calculates EGC reports with story series as a separate input", () => {
