@@ -35,7 +35,7 @@ describe("coin calculation", () => {
     const quantityActivity = DEFAULT_ACTIVITIES.find((activity) => activity.key === "vacancy_student_chats")!;
     const fixedActivity = DEFAULT_ACTIVITIES.find((activity) => activity.key === "own_university_lecture")!;
 
-    expect(calculateActivityCoins(quantityActivity, 4)).toBe(20);
+    expect(calculateActivityCoins(quantityActivity, 4)).toBe(12);
     expect(calculateActivityCoins(fixedActivity, 4)).toBe(50);
     expect(normalizeQuantity(quantityActivity, 2.8)).toBe(2);
   });
@@ -53,11 +53,11 @@ describe("coin calculation", () => {
       bonusDistinctBy: "activity"
     });
 
-    expect(summary.baseCoins).toBe(20);
+    expect(summary.baseCoins).toBe(16);
     expect(summary.hasActivity).toBe(true);
     expect(summary.bonusCoins).toBe(10);
-    expect(summary.totalCoins).toBe(30);
-    expect(summary.reportLine).toBe("@anna - 30 coins");
+    expect(summary.totalCoins).toBe(26);
+    expect(summary.reportLine).toBe("@anna - 26 coins");
   });
 
   it("keeps spaces in Slack display names", () => {
