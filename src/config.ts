@@ -99,10 +99,21 @@ function dataSourceIdEnv(name: string, fallback?: string): string | undefined {
   return value?.replace(/^collection:\/\//, "");
 }
 
-function schedule(prefix: string, fallbackDay: number, fallbackHour: number) {
+function minuteEnv(name: string, fallback: number): number {
+  const value = env(name);
+  if (!value) return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 59) {
+    throw new Error(`${name} must be an integer between 0 and 59.`);
+  }
+  return parsed;
+}
+
+function schedule(prefix: string, fallbackDay: number, fallbackHour: number, fallbackReminderMinute = 1) {
   return {
     reminderDay: numberEnv(`${prefix}REMINDER_DAY`, numberEnv("REMINDER_DAY", fallbackDay)),
     reminderHour: numberEnv(`${prefix}REMINDER_HOUR`, numberEnv("REMINDER_HOUR", fallbackHour)),
+    reminderMinute: minuteEnv(`${prefix}REMINDER_MINUTE`, minuteEnv("REMINDER_MINUTE", fallbackReminderMinute)),
     reportDay: numberEnv(`${prefix}REPORT_DAY`, numberEnv("REPORT_DAY", 5)),
     reportHour: numberEnv(`${prefix}REPORT_HOUR`, numberEnv("REPORT_HOUR", 9))
   };

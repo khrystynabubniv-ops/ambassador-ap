@@ -13,7 +13,7 @@ export function startSchedulers(config: AppConfig, programs: RewardsProgram[]): 
 
 function startScheduler(_config: AppConfig, programConfig: ProgramConfig, program: RewardsProgram): void {
   cron.schedule(
-    `0 ${programConfig.reminderHour} ${programConfig.reminderDay} * *`,
+    `${programConfig.reminderMinute} ${programConfig.reminderHour} ${programConfig.reminderDay} * *`,
     async () => {
       const now = DateTime.now().setZone(programConfig.timezone);
       const monthToReport = previousMonth(programConfig.timezone, now);

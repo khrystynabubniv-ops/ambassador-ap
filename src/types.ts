@@ -80,6 +80,7 @@ export type ProgramConfig = {
   timezone: string;
   reminderDay: number;
   reminderHour: number;
+  reminderMinute: number;
   reportDay: number;
   reportHour: number;
   bonusThreshold: number;
